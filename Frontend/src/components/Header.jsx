@@ -166,14 +166,6 @@ export default function Header({ onToggleSidebar, isSidebarOpen }) {
           Budidaya Lele
         </Typography>
 
-        <Tooltip title="Notifikasi">
-          <IconButton color="inherit" sx={{ mr: 1.5 }}>
-            <Badge badgeContent={0} color="error">
-              <NotificationsIcon />
-            </Badge>
-          </IconButton>
-        </Tooltip>
-
         <Box>
           <Tooltip title="Akun">
             <IconButton onClick={handleMenu} color="inherit" sx={{ p: 0 }}>

@@ -50,6 +50,26 @@ const formatKg = (value) => {
   return new Intl.NumberFormat('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 3 }).format(n) + ' kg';
 };
 
+const formatWaktu = (val) => {
+  if (!val) return '-';
+
+  const d = new Date(val);
+
+  if (isNaN(d)) return '-';
+
+  return d
+    .toLocaleString('id-ID', {
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+    .replace(/:/g, '.');
+};
+
 // helper waktu → selalu HH:mm (untuk <input type="time">)
 const toHHmm = (val) => {
   if (!val) return '';
@@ -112,7 +132,10 @@ export default function KolamDetail() {
   const [deathLogs, setDeathLogs] = useState([]);
   const [growthLogs, setGrowthLogs] = useState([]);
   const [addFishLogs, setAddFishLogs] = useState([]); // masih disimpan lokal, tapi TAMPILAN pakai aktivitas
-  
+  const [showAllSensor, setShowAllSensor] = useState(false);
+  const [showAllDevice, setShowAllDevice] = useState(false);
+  const [showAllAddFish, setShowAllAddFish] = useState(false);
+
   const [logs, setLogs] = useState([]);
   const [lastAlert, setLastAlert] = useState(null);
   const fetchLogs = async () => {
@@ -423,15 +446,13 @@ export default function KolamDetail() {
       const rows = await res.json();
       const mapped = (rows || []).map((log) => {
         const dt = log.created_at ? new Date(log.created_at) : null;
-        const tanggalStr = log.tanggal ? new Date(log.tanggal).toLocaleDateString() : dt ? dt.toLocaleDateString() : '-';
-        const waktuStr = log.waktu ? toHHmm(log.waktu) : dt ? dt.toLocaleTimeString() : '-';
+        const waktuFormatted = log.created_at ? formatWaktu(log.created_at) : '-';
         const typeRaw = (log.stok_pakan?.jenis || log.stok_pakan?.type || '').toLowerCase();
         const isVitamin = typeRaw === 'vitamin';
 
         return {
           id: log.id,
-          tanggal: tanggalStr,
-          waktu: waktuStr,
+          waktu: waktuFormatted,
           nama: log.stok_pakan?.nama_pakan || log.stok_pakan?.name || '-',
           jenis: isVitamin ? 'Vitamin' : log.stok_pakan?.jenis || log.stok_pakan?.type || '-',
           jumlah: Number(log.jumlah_kg ?? 0),
@@ -518,12 +539,15 @@ export default function KolamDetail() {
       if (!res.ok) throw new Error('Gagal fetch mortalitas');
       const data = await res.json();
 
-      const mapped = data.map((log) => ({
-        tanggal: new Date(log.tanggal).toLocaleDateString(),
-        waktu: log.waktu ? new Date(`1970-01-01T${log.waktu}`).toLocaleTimeString() : '-',
-        jumlah: log.jumlah_mati,
-        keterangan: log.keterangan || '-',
-      }));
+      const mapped = data.map((log) => {
+        const dtRaw = log.tanggal && log.waktu ? `${log.tanggal}T${log.waktu}` : log.tanggal;
+
+        return {
+          waktu: formatWaktu(dtRaw),
+          jumlah: log.jumlah_mati,
+          keterangan: log.keterangan || '-',
+        };
+      });
 
       setDeathLogs(mapped);
     } catch (err) {
@@ -563,6 +587,7 @@ export default function KolamDetail() {
           hour12: false,
           timeZone: 'Asia/Jakarta',
         }),
+
         ph: Number(s.ph),
       }));
 
@@ -727,21 +752,14 @@ export default function KolamDetail() {
   };
 
   const fetchGrowthLogs = async () => {
-    const paths = [`${API_BASE}/growth_log/${id}`, `${API_BASE}/growth-log/${id}`, `${API_BASE}/kolam/${id}/growth_log`, `${API_BASE}/kolam/${id}/growth-log`];
     try {
-      let ok = false;
-      let data = [];
-      for (const url of paths) {
-        try {
-          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-          if (res.ok) {
-            data = await res.json();
-            ok = true;
-            break;
-          }
-        } catch (_) {}
-      }
-      if (!ok) throw new Error('Gagal fetch data biomassa ikan');
+      const res = await fetch(`${API_BASE}/growth_log/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) throw new Error('Gagal fetch data biomassa ikan');
+
+      const data = await res.json();
 
       const chartData = data.map((log) => ({
         tanggal: new Date(log.tanggal).toLocaleString(),
@@ -749,6 +767,7 @@ export default function KolamDetail() {
       }));
 
       const cleaned = chartData.filter((x) => typeof x.total_kg === 'number');
+
       if (cleaned.length === 0) {
         const nowTotalKg = fish.reduce((s, f) => s + Number(f.total_kg || 0), 0);
         setGrowthLogs([{ tanggal: new Date().toLocaleString(), total_kg: nowTotalKg }]);
@@ -757,11 +776,8 @@ export default function KolamDetail() {
       }
     } catch (err) {
       console.error(err);
-      const nowTotalKg = fish.reduce((s, f) => s + Number(f.total_kg || 0), 0);
-      setGrowthLogs([{ tanggal: new Date().toLocaleString(), total_kg: nowTotalKg }]);
     }
   };
-
   // 🔹 Ambil aktivitas kolam (termasuk sortir, add fish, panen, dll)
   const fetchAktivitas = async () => {
     const paths = [`${API_BASE}/aktivitas/kolam/${id}`, `${API_BASE}/aktivitas/${id}`, `${API_BASE}/aktivitas?kolam_id=${id}`, `${API_BASE}/activity/kolam/${id}`, `${API_BASE}/activity/${id}`, `${API_BASE}/activity?kolam_id=${id}`];
@@ -781,22 +797,35 @@ export default function KolamDetail() {
       if (!ok) throw new Error('Gagal fetch aktivitas kolam');
 
       const mapped = (data || []).map((a, idx) => {
-        // 🔁 PRIORITAS: waktu event, baru created_at
         const dtRaw = a.waktu || a.created_at || a.tanggal || a.timestamp || null;
+
         const d = dtRaw ? new Date(dtRaw) : null;
+
+        const waktuFormatted = d
+          ? d
+              .toLocaleString('id-ID', {
+                day: 'numeric',
+                month: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit', // ✅ INI KUNCINYA
+                hour12: false,
+              })
+              .replace(/:/g, '.') // 🔥 biar jadi 09.07.06
+          : '-';
+
         const meta = a.meta || a.metadata || {};
+
         return {
           id: a.id ?? idx,
-          tanggal: d ? d.toLocaleDateString() : '-',
-          waktu: d ? d.toLocaleTimeString() : '-',
+          waktu: waktuFormatted, // ✅ fix disini
+          tanggal: '-', // opsional, bisa dihapus sekalian
           jenis: a.jenis || a.type || '-',
           aksi: a.aksi || a.action || '-',
           deskripsi: a.deskripsi || a.description || '-',
           qty_ekor: a.qty_ekor ?? null,
-          berat_kg:
-            a.berat_kg ??
-            a.amount_kg ?? // fallback untuk FEEDING log
-            null,
+          berat_kg: a.berat_kg ?? a.amount_kg ?? null,
           meta,
           created_at_raw: a.created_at || null,
           waktu_raw: a.waktu || null,
@@ -1024,6 +1053,8 @@ export default function KolamDetail() {
           jumlah_ekor: qty,
           total_berat_kg: Number(formData.total_berat_kg || 0),
         };
+
+        console.log('🚀 KIRIM REQUEST KE:', `${API_BASE}/kolam/${id}/add_fish`);
 
         const res = await fetch(`${API_BASE}/kolam/${id}/add_fish`, {
           method: 'POST',
@@ -1696,7 +1727,7 @@ export default function KolamDetail() {
                         Panen
                       </Button>
                     </Box>
-                    {/* Tombol Kontrol Aktuator Monitoring */}
+                    {/* Tombol Kontrol Aktuator Monitoring 
                     <Box mt={3}>
                       <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
                         Kontrol Monitoring
@@ -1728,6 +1759,7 @@ export default function KolamDetail() {
                         </Button>
                       </Box>
                     </Box>
+                    */}
                   </Box>
                 </Grid>
 
@@ -1893,15 +1925,27 @@ export default function KolamDetail() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {sensorLogs.map((log) => (
+                      {(showAllSensor ? sensorLogs : sensorLogs.slice(0, 5)).map((log) => (
                         <TableRow key={log.id}>
-                          <TableCell>{new Date(log.created_at).toLocaleString()}</TableCell>
+                          <TableCell>
+                            {' '}
+                            {new Date(log.created_at + 'Z').toLocaleString('id-ID', {
+                              timeZone: 'Asia/Jakarta',
+                            })}
+                          </TableCell>
                           <TableCell>{log.type === 'ph' ? 'pH' : 'Suhu'}</TableCell>
                           <TableCell>{log.value}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
+                  {sensorLogs.length > 5 && (
+                    <Box textAlign="center" mt={1}>
+                      <Button size="small" onClick={() => setShowAllSensor(!showAllSensor)}>
+                        {showAllSensor ? 'Tampilkan Lebih Sedikit' : 'Lihat Semua'}
+                      </Button>
+                    </Box>
+                  )}
                 </TableContainer>
               )}
             </CardContent>
@@ -1926,15 +1970,27 @@ export default function KolamDetail() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {deviceLogs.map((log) => (
+                      {(showAllDevice ? deviceLogs : deviceLogs.slice(0, 5)).map((log) => (
                         <TableRow key={log.id}>
-                          <TableCell>{new Date(log.created_at).toLocaleString()}</TableCell>
+                          <TableCell>
+                            {' '}
+                            {new Date(log.created_at + 'Z').toLocaleString('id-ID', {
+                              timeZone: 'Asia/Jakarta',
+                            })}
+                          </TableCell>
                           <TableCell>{log.type === 'pompa' ? 'Pompa' : 'Valve'}</TableCell>
                           <TableCell>{log.value === 1 ? 'Nyala / Terbuka' : 'Mati / Tertutup'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
+                  {deviceLogs.length > 5 && (
+                    <Box textAlign="center" mt={1}>
+                      <Button size="small" onClick={() => setShowAllDevice(!showAllDevice)}>
+                        {showAllDevice ? 'Tampilkan Lebih Sedikit' : 'Lihat Semua'}
+                      </Button>
+                    </Box>
+                  )}
                 </TableContainer>
               )}
             </CardContent>
@@ -1965,9 +2021,10 @@ export default function KolamDetail() {
 
                     {/* 🔹 TABLE BODY */}
                     <TableBody>
-                      {addFishActivities.map((row, idx) => {
+                      {(showAllAddFish ? addFishActivities : addFishActivities.slice(0, 5)).map((row, idx) => {
                         // Waktu (backend sudah kirim dalam row.waktu)
-                        const waktuTeks = `${row.tanggal || '-'} ${row.waktu || ''}`.trim();
+                        const waktuTeks = row.waktu;
+
                         return (
                           <TableRow key={row.id ?? idx}>
                             <TableCell>{waktuTeks}</TableCell>
@@ -1986,6 +2043,14 @@ export default function KolamDetail() {
                       })}
                     </TableBody>
                   </Table>
+                  {/* 🔥 PINDAH KE SINI */}
+                  {addFishActivities.length > 5 && (
+                    <Box textAlign="center" mt={1}>
+                      <Button size="small" onClick={() => setShowAllAddFish(!showAllAddFish)}>
+                        {showAllAddFish ? 'Tampilkan Lebih Sedikit' : 'Lihat Semua'}
+                      </Button>
+                    </Box>
+                  )}
                 </TableContainer>
               )}
             </CardContent>
@@ -2003,7 +2068,6 @@ export default function KolamDetail() {
                     <Table size="small">
                       <TableHead>
                         <TableRow sx={{ backgroundColor: '#5856d6' }}>
-                          <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Tanggal</TableCell>
                           <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Waktu</TableCell>
                           <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Nama</TableCell>
                           <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Jenis</TableCell>
@@ -2016,7 +2080,6 @@ export default function KolamDetail() {
                       <TableBody>
                         {(showAllFeeding ? feedingLogs : feedingLogs.slice(0, 5)).map((log, i) => (
                           <TableRow key={log.id ?? i}>
-                            <TableCell>{log.tanggal}</TableCell>
                             <TableCell>{log.waktu}</TableCell>
                             <TableCell>{log.nama}</TableCell>
                             <TableCell>
@@ -2059,7 +2122,6 @@ export default function KolamDetail() {
                     <Table size="small">
                       <TableHead>
                         <TableRow sx={{ backgroundColor: '#5856d6' }}>
-                          <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Tanggal</TableCell>
                           <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Waktu</TableCell>
                           <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Jumlah Mati</TableCell>
                           <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Keterangan</TableCell>
@@ -2068,7 +2130,6 @@ export default function KolamDetail() {
                       <TableBody>
                         {(showAllDeath ? deathLogs : deathLogs.slice(0, 5)).map((log, i) => (
                           <TableRow key={i}>
-                            <TableCell>{log.tanggal}</TableCell>
                             <TableCell>{log.waktu}</TableCell>
                             <TableCell>{log.jumlah}</TableCell>
                             <TableCell>{log.keterangan}</TableCell>
@@ -2103,7 +2164,6 @@ export default function KolamDetail() {
                     <Table size="small">
                       <TableHead>
                         <TableRow sx={{ backgroundColor: '#5856d6' }}>
-                          <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Tanggal</TableCell>
                           <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Waktu</TableCell>
                           <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Aksi</TableCell>
                           <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Deskripsi</TableCell>
@@ -2119,7 +2179,6 @@ export default function KolamDetail() {
                           const susutPct = row.meta?.susut_percent ?? null;
                           return (
                             <TableRow key={row.id}>
-                              <TableCell>{row.tanggal}</TableCell>
                               <TableCell>{row.waktu}</TableCell>
                               <TableCell>{row.aksi}</TableCell>
                               <TableCell>{row.deskripsi}</TableCell>

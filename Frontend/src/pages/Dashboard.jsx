@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Paper,
@@ -23,46 +23,34 @@ import {
   useMediaQuery,
   Card,
   CardContent,
-} from "@mui/material";
-import Layout from "../components/Layout";
-import axios from "axios";
-import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
-import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
-import TrendingDownOutlinedIcon from "@mui/icons-material/TrendingDownOutlined";
-import OpacityOutlinedIcon from "@mui/icons-material/OpacityOutlined";
-import RestaurantOutlinedIcon from "@mui/icons-material/RestaurantOutlined";
-import BubbleChartOutlinedIcon from "@mui/icons-material/BubbleChartOutlined";
-import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import StorefrontIcon from "@mui/icons-material/Storefront";
-import { useTheme } from "@mui/material/styles";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RTooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+} from '@mui/material';
+import Layout from '../components/Layout';
+import axios from 'axios';
+import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
+import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined';
+import TrendingDownOutlinedIcon from '@mui/icons-material/TrendingDownOutlined';
+import OpacityOutlinedIcon from '@mui/icons-material/OpacityOutlined';
+import RestaurantOutlinedIcon from '@mui/icons-material/RestaurantOutlined';
+import BubbleChartOutlinedIcon from '@mui/icons-material/BubbleChartOutlined';
+import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import { useTheme } from '@mui/material/styles';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend, ResponsiveContainer } from 'recharts';
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = 'http://103.103.22.213/api';
 const PANEN_MAX_ROWS = 10000; // fallback aggregator (selaras Panen.jsx)
 
 /* ================= Helpers ================= */
 const toNum = (v, d = 0) => {
-  if (v === null || v === undefined || v === "") return d;
+  if (v === null || v === undefined || v === '') return d;
   const n = Number(v);
   return Number.isFinite(n) ? n : d;
 };
 
-const formatRp = (v) =>
-  Number.isFinite(Number(v))
-    ? "Rp " + Math.round(Number(v)).toLocaleString("id-ID")
-    : "-";
+const formatRp = (v) => (Number.isFinite(Number(v)) ? 'Rp ' + Math.round(Number(v)).toLocaleString('id-ID') : '-');
 
 const parseDate = (s) => {
   try {
@@ -72,8 +60,7 @@ const parseDate = (s) => {
   }
 };
 
-const monthKey = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
 const lastNMonths = (n) => {
   const arr = [];
@@ -82,37 +69,34 @@ const lastNMonths = (n) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     arr.push({
       key: monthKey(d),
-      label:
-        d.toLocaleString("id-ID", { month: "short" }) +
-        " " +
-        String(d.getFullYear()).slice(-2),
+      label: d.toLocaleString('id-ID', { month: 'short' }) + ' ' + String(d.getFullYear()).slice(-2),
     });
   }
   return arr;
 };
 
 /* ============== Small stat card ============== */
-function StatCard({ icon, title, value, hint, accent = "#7C3AED" }) {
+function StatCard({ icon, title, value, hint, accent = '#7C3AED' }) {
   return (
     <Paper
       sx={{
         p: 2.25,
         borderRadius: 3,
-        width: "100%",
-        height: "100%",
-        boxSizing: "border-box",
-        background: "#fff",
-        border: "1px solid #f1f1f4",
-        boxShadow: "0 1px 2px rgba(16,24,40,0.04)",
-        position: "relative",
-        overflow: "hidden",
-        "::before": {
+        width: '100%',
+        height: '100%',
+        boxSizing: 'border-box',
+        background: '#fff',
+        border: '1px solid #f1f1f4',
+        boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
+        position: 'relative',
+        overflow: 'hidden',
+        '::before': {
           content: '""',
-          position: "absolute",
+          position: 'absolute',
           top: 0,
           left: 0,
           height: 4,
-          width: "100%",
+          width: '100%',
           background: `linear-gradient(90deg, ${accent}, #22c1c3)`,
           opacity: 0.6,
         },
@@ -123,11 +107,11 @@ function StatCard({ icon, title, value, hint, accent = "#7C3AED" }) {
           sx={{
             width: 44,
             height: 44,
-            borderRadius: "50%",
-            display: "grid",
-            placeItems: "center",
-            background: "rgba(124,58,237,0.06)",
-            border: "1px solid #ececff",
+            borderRadius: '50%',
+            display: 'grid',
+            placeItems: 'center',
+            background: 'rgba(124,58,237,0.06)',
+            border: '1px solid #ececff',
             flexShrink: 0,
           }}
         >
@@ -177,14 +161,14 @@ function KolamRow({ row }) {
               sx={{
                 px: 2,
                 py: 1.5,
-                bgcolor: "transparent",
-                borderTop: "1px dashed rgba(2,6,23,0.08)",
+                bgcolor: 'transparent',
+                borderTop: '1px dashed rgba(2,6,23,0.08)',
               }}
             >
               <Typography variant="subtitle2" gutterBottom>
                 Breakdown batch (isi kolam)
               </Typography>
-              <TableContainer sx={{ overflowX: "auto" }}>
+              <TableContainer sx={{ overflowX: 'auto' }}>
                 <Table size="small" sx={{ minWidth: 720 }}>
                   <TableHead>
                     <TableRow>
@@ -201,26 +185,14 @@ function KolamRow({ row }) {
                     {row.breakdown.map((b, i) => (
                       <TableRow key={i}>
                         <TableCell>
-                          {b.species} — {b.ukuran || "-"}
+                          {b.species} — {b.ukuran || '-'}
                         </TableCell>
                         <TableCell align="right">{b.jumlah_ekor}</TableCell>
-                        <TableCell align="right">
-                          {toNum(b.total_kg, 0).toFixed(2)}
-                        </TableCell>
-                        <TableCell align="right">
-                          {toNum(b.harga_per_kg_snapshot, 0) > 0
-                            ? `${formatRp(b.harga_per_kg_snapshot)}/kg`
-                            : toNum(b.harga_per_unit_snapshot, 0) > 0
-                            ? `${formatRp(b.harga_per_unit_snapshot)}/ekor`
-                            : "-"}
-                        </TableCell>
+                        <TableCell align="right">{toNum(b.total_kg, 0).toFixed(2)}</TableCell>
+                        <TableCell align="right">{toNum(b.harga_per_kg_snapshot, 0) > 0 ? `${formatRp(b.harga_per_kg_snapshot)}/kg` : toNum(b.harga_per_unit_snapshot, 0) > 0 ? `${formatRp(b.harga_per_unit_snapshot)}/ekor` : '-'}</TableCell>
                         <TableCell align="right">{formatRp(b.aset)}</TableCell>
-                        <TableCell align="right">
-                          {formatRp(b.feed_cost_accum)}
-                        </TableCell>
-                        <TableCell align="right">
-                          {formatRp(b.vitamin_cost_accum)}
-                        </TableCell>
+                        <TableCell align="right">{formatRp(b.feed_cost_accum)}</TableCell>
+                        <TableCell align="right">{formatRp(b.vitamin_cost_accum)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -238,10 +210,7 @@ function KolamRow({ row }) {
 function KolamCardMobile({ row }) {
   const [open, setOpen] = useState(false);
   return (
-    <Card
-      variant="outlined"
-      sx={{ borderRadius: 2, borderColor: "#f1f1f4", background: "#fff" }}
-    >
+    <Card variant="outlined" sx={{ borderRadius: 2, borderColor: '#f1f1f4', background: '#fff' }}>
       <CardContent sx={{ p: 1.5 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Typography variant="subtitle2" fontWeight={700}>
@@ -292,14 +261,10 @@ function KolamCardMobile({ row }) {
           </Typography>
           <Stack spacing={1} mt={0.5}>
             {row.breakdown.map((b, i) => (
-              <Paper
-                key={i}
-                variant="outlined"
-                sx={{ p: 1, borderRadius: 1.5, borderColor: "#efeff5" }}
-              >
+              <Paper key={i} variant="outlined" sx={{ p: 1, borderRadius: 1.5, borderColor: '#efeff5' }}>
                 <Stack direction="row" justifyContent="space-between">
                   <Typography variant="body2">
-                    {b.species} — {b.ukuran || "-"}
+                    {b.species} — {b.ukuran || '-'}
                   </Typography>
                   <Typography variant="body2" fontWeight={600}>
                     {formatRp(b.aset)}
@@ -325,11 +290,11 @@ function KolamCardMobile({ row }) {
 /* ===================== Dashboard ===================== */
 export default function Dashboard() {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // UI state
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   // Data
   const [summary, setSummary] = useState({
@@ -347,15 +312,11 @@ export default function Dashboard() {
     total_laba_rugi: 0,
     avg_fcr: null,
     avg_harga_jual: null,
-    _source: "summary", // "summary" | "computed"
+    _source: 'summary', // "summary" | "computed"
   });
 
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  const headers = useMemo(
-    () => (token ? { Authorization: `Bearer ${token}` } : {}),
-    [token]
-  );
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const headers = useMemo(() => (token ? { Authorization: `Bearer ${token}` } : {}), [token]);
 
   // ===== util aggregator (selaras Panen.jsx) =====
   const computePanenSummaryFromRows = (rows) => {
@@ -374,18 +335,14 @@ export default function Dashboard() {
       const kg = toNum(p.total_berat_kg, 0);
       const harga = toNum(p.harga_jual, 0);
       const lr = toNum(p.laba_rugi, 0);
-      const total_penjualan =
-        p.total_penjualan !== undefined && p.total_penjualan !== null
-          ? toNum(p.total_penjualan, 0)
-          : kg * harga;
+      const total_penjualan = p.total_penjualan !== undefined && p.total_penjualan !== null ? toNum(p.total_penjualan, 0) : kg * harga;
 
       totalTrans += 1;
       totalKg += kg;
       totalPenjualan += total_penjualan;
       totalLabaRugi += lr;
 
-      const fcrVal =
-        p.fcr !== null && p.fcr !== undefined ? Number(p.fcr) : null;
+      const fcrVal = p.fcr !== null && p.fcr !== undefined ? Number(p.fcr) : null;
       if (Number.isFinite(fcrVal)) {
         sumFcr += fcrVal;
         cntFcr += 1;
@@ -404,7 +361,7 @@ export default function Dashboard() {
       total_laba_rugi: totalLabaRugi,
       avg_fcr: cntFcr > 0 ? sumFcr / cntFcr : null,
       avg_harga_jual: wHargaDenom > 0 ? wHargaNumer / wHargaDenom : null,
-      _source: "computed",
+      _source: 'computed',
     };
   };
 
@@ -417,11 +374,7 @@ export default function Dashboard() {
       const res = await axios.get(url, { headers, params });
 
       const payload = res?.data || {};
-      const rows = Array.isArray(payload.items)
-        ? payload.items
-        : Array.isArray(payload)
-        ? payload
-        : [];
+      const rows = Array.isArray(payload.items) ? payload.items : Array.isArray(payload) ? payload : [];
 
       const agg = computePanenSummaryFromRows(rows);
       setPanenSummary(agg);
@@ -433,7 +386,7 @@ export default function Dashboard() {
         total_laba_rugi: 0,
         avg_fcr: null,
         avg_harga_jual: null,
-        _source: "computed",
+        _source: 'computed',
       });
     }
   };
@@ -450,15 +403,9 @@ export default function Dashboard() {
         total_berat: toNum(data.total_berat, 0),
         total_penjualan: toNum(data.total_penjualan, 0),
         total_laba_rugi: toNum(data.total_laba_rugi, 0),
-        avg_fcr:
-          data.avg_fcr !== null && data.avg_fcr !== undefined
-            ? Number(data.avg_fcr)
-            : null,
-        avg_harga_jual:
-          data.avg_harga_jual !== null && data.avg_harga_jual !== undefined
-            ? Number(data.avg_harga_jual)
-            : null,
-        _source: "summary",
+        avg_fcr: data.avg_fcr !== null && data.avg_fcr !== undefined ? Number(data.avg_fcr) : null,
+        avg_harga_jual: data.avg_harga_jual !== null && data.avg_harga_jual !== undefined ? Number(data.avg_harga_jual) : null,
+        _source: 'summary',
       };
 
       const invalidSummary =
@@ -467,8 +414,7 @@ export default function Dashboard() {
         normalized.total_penjualan === 0 &&
         normalized.total_laba_rugi === 0 &&
         (normalized.avg_fcr === null || Number.isNaN(normalized.avg_fcr)) &&
-        (normalized.avg_harga_jual === null ||
-          Number.isNaN(normalized.avg_harga_jual));
+        (normalized.avg_harga_jual === null || Number.isNaN(normalized.avg_harga_jual));
 
       if (invalidSummary) {
         await fetchPanenSummaryFromList();
@@ -483,22 +429,16 @@ export default function Dashboard() {
   // ---- Fetch all ----
   const fetchAll = async () => {
     if (!token) {
-      setError("Belum login. Silakan login dulu.");
+      setError('Belum login. Silakan login dulu.');
       setLoading(false);
       return;
     }
-    setError("");
+    setError('');
     setLoading(true);
     try {
-      const [sumRes, txRes, kolamRes] = await Promise.all([
-        axios.get(`${API_BASE}/transaksi/summary`, { headers }),
-        axios.get(`${API_BASE}/transaksi`, { headers }),
-        axios.get(`${API_BASE}/kolam`, { headers }),
-      ]);
+      const [sumRes, txRes, kolamRes] = await Promise.all([axios.get(`${API_BASE}/transaksi/summary`, { headers }), axios.get(`${API_BASE}/transaksi`, { headers }), axios.get(`${API_BASE}/kolam`, { headers })]);
 
-      setSummary(
-        sumRes.data || { total_pemasukan: 0, total_pengeluaran: 0, saldo: 0 }
-      );
+      setSummary(sumRes.data || { total_pemasukan: 0, total_pengeluaran: 0, saldo: 0 });
       const txList = Array.isArray(txRes.data) ? txRes.data : [];
       setTransactions(txList);
 
@@ -511,8 +451,8 @@ export default function Dashboard() {
           axios
             .get(`${API_BASE}/kolam/${k.id}/fish`, { headers })
             .then((r) => [k.id, r.data || []])
-            .catch(() => [k.id, []])
-        )
+            .catch(() => [k.id, []]),
+        ),
       );
       const map = {};
       fishPairs.forEach(([id, fish]) => (map[id] = fish));
@@ -522,11 +462,7 @@ export default function Dashboard() {
       await fetchPanenSummaryWithFallback();
     } catch (e) {
       console.error(e);
-      setError(
-        e?.response?.data?.detail
-          ? `Gagal memuat data: ${e.response.data.detail}`
-          : "Gagal memuat data dashboard. Cek koneksi/console."
-      );
+      setError(e?.response?.data?.detail ? `Gagal memuat data: ${e.response.data.detail}` : 'Gagal memuat data dashboard. Cek koneksi/console.');
       try {
         await fetchPanenSummaryWithFallback();
       } catch (_) {}
@@ -582,7 +518,7 @@ export default function Dashboard() {
         vitaminCost += vitC;
 
         return {
-          species: f?.ikan?.species || "Ikan",
+          species: f?.ikan?.species || 'Ikan',
           ukuran: f.ukuran_ikan_snapshot || null,
           jumlah_ekor: qty,
           total_kg: totalKg,
@@ -606,24 +542,13 @@ export default function Dashboard() {
     });
   }, [kolamList, perKolamFish]);
 
-  const top5Kolam = useMemo(
-    () => [...asetPerKolam].sort((a, b) => b.total - a.total).slice(0, 5),
-    [asetPerKolam]
-  );
+  const top5Kolam = useMemo(() => [...asetPerKolam].sort((a, b) => b.total - a.total).slice(0, 5), [asetPerKolam]);
 
-  const totalAsetKolam = useMemo(
-    () => asetPerKolam.reduce((s, k) => s + (k.total || 0), 0),
-    [asetPerKolam]
-  );
+  const totalAsetKolam = useMemo(() => asetPerKolam.reduce((s, k) => s + (k.total || 0), 0), [asetPerKolam]);
 
   /* ============ Monthly (Income vs Expense) ============ */
   const monthlyBar = useMemo(() => {
-    const base = Object.fromEntries(
-      lastNMonths(8).map((m) => [
-        m.key,
-        { month: m.label, pemasukan: 0, pengeluaran: 0 },
-      ])
-    );
+    const base = Object.fromEntries(lastNMonths(8).map((m) => [m.key, { month: m.label, pemasukan: 0, pengeluaran: 0 }]));
 
     (transactions || []).forEach((t) => {
       const d = parseDate(t.tanggal || t.created_at);
@@ -632,11 +557,11 @@ export default function Dashboard() {
       if (!base[key]) return;
 
       const jumlah = toNum(t.jumlah ?? t.amount, 0);
-      const kategori = String(t.kategori ?? t.tipe ?? "").toLowerCase();
+      const kategori = String(t.kategori ?? t.tipe ?? '').toLowerCase();
 
-      if (kategori === "pemasukan" || kategori.includes("pemasukan")) {
+      if (kategori === 'pemasukan' || kategori.includes('pemasukan')) {
         base[key].pemasukan += jumlah;
-      } else if (kategori === "pengeluaran" || kategori.includes("pengeluaran")) {
+      } else if (kategori === 'pengeluaran' || kategori.includes('pengeluaran')) {
         base[key].pengeluaran += jumlah;
       }
     });
@@ -647,25 +572,13 @@ export default function Dashboard() {
   /* ====================== UI ====================== */
   return (
     <Layout>
-      <Box sx={{ width: "100%", mx: 0, my: 2, px: { xs: 1.25, sm: 2, md: 3 } }}>
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          alignItems={{ xs: "flex-start", sm: "center" }}
-          justifyContent="space-between"
-          spacing={1.25}
-          sx={{ mb: { xs: 1.5, sm: 2 } }}
-        >
+      <Box sx={{ width: '100%', mx: 0, my: 2, px: { xs: 1.25, sm: 2, md: 3 } }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1.25} sx={{ mb: { xs: 1.5, sm: 2 } }}>
           <Typography variant="h5" fontWeight={800} sx={{ fontSize: { xs: 20, sm: 24 } }}>
             Dashboard
           </Typography>
-          <Stack direction="row" spacing={1} sx={{ width: { xs: "100%", sm: "auto" } }}>
-            <Button
-              startIcon={<RefreshIcon />}
-              size="small"
-              variant="outlined"
-              onClick={fetchAll}
-              sx={{ width: { xs: "100%", sm: "auto" } }}
-            >
+          <Stack direction="row" spacing={1} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+            <Button startIcon={<RefreshIcon />} size="small" variant="outlined" onClick={fetchAll} sx={{ width: { xs: '100%', sm: 'auto' } }}>
               Refresh
             </Button>
           </Stack>
@@ -678,7 +591,7 @@ export default function Dashboard() {
         )}
 
         {loading ? (
-          <Box sx={{ display: "grid", placeItems: "center", height: 400 }}>
+          <Box sx={{ display: 'grid', placeItems: 'center', height: 400 }}>
             <CircularProgress />
           </Box>
         ) : (
@@ -689,9 +602,9 @@ export default function Dashboard() {
                 p: { xs: 1.25, sm: 2 },
                 mb: { xs: 2, sm: 3 },
                 borderRadius: 3,
-                backgroundColor: "#fff",
-                border: "1px solid #f1f1f4",
-                boxShadow: "0 1px 2px rgba(16,24,40,0.04)",
+                backgroundColor: '#fff',
+                border: '1px solid #f1f1f4',
+                boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
               }}
             >
               <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.25 }}>
@@ -699,49 +612,20 @@ export default function Dashboard() {
               </Typography>
               <Grid container spacing={1.5} alignItems="stretch">
                 <Grid item xs={12} sm={6} md={3}>
-                  <StatCard
-                    icon={<PaidOutlinedIcon />}
-                    title="Saldo (Cash)"
-                    value={formatRp(summary.saldo)}
-                    hint={`In: ${formatRp(summary.total_pemasukan)} · Out: ${formatRp(
-                      summary.total_pengeluaran
-                    )}`}
-                    accent="#7C3AED"
-                  />
+                  <StatCard icon={<PaidOutlinedIcon />} title="Saldo (Cash)" value={formatRp(summary.saldo)} hint={`In: ${formatRp(summary.total_pemasukan)} · Out: ${formatRp(summary.total_pengeluaran)}`} accent="#7C3AED" />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
-                  <StatCard
-                    icon={<OpacityOutlinedIcon />}
-                    title="Jumlah Kolam Aktif"
-                    value={String(totalKolam)}
-                    hint={`Total biomassa: ${Math.round(totalBiomassaKg)} kg`}
-                    accent="#06B6D4"
-                  />
+                  <StatCard icon={<OpacityOutlinedIcon />} title="Jumlah Kolam Aktif" value={String(totalKolam)} hint={`Total biomassa: ${Math.round(totalBiomassaKg)} kg`} accent="#06B6D4" />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
-                  <StatCard
-                    icon={<BubbleChartOutlinedIcon />}
-                    title="Populasi Ikan"
-                    value={`${(totalEkor || 0).toLocaleString("id-ID")} ekor`}
-                    hint={`Berat rata-rata: ${Math.round(avgBeratGram)} g/ekor`}
-                    accent="#22C55E"
-                  />
+                  <StatCard icon={<BubbleChartOutlinedIcon />} title="Populasi Ikan" value={`${(totalEkor || 0).toLocaleString('id-ID')} ekor`} hint={`Berat rata-rata: ${Math.round(avgBeratGram)} g/ekor`} accent="#22C55E" />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <StatCard
                     icon={<RestaurantOutlinedIcon />}
                     title="Avg FCR Panen"
-                    value={
-                      panenSummary?.avg_fcr && Number.isFinite(panenSummary.avg_fcr)
-                        ? panenSummary.avg_fcr.toFixed(2)
-                        : "-"
-                    }
-                    hint={`Harga jual rata-rata: ${
-                      panenSummary?.avg_harga_jual &&
-                      Number.isFinite(panenSummary.avg_harga_jual)
-                        ? formatRp(panenSummary.avg_harga_jual)
-                        : "-"
-                    }${panenSummary._source === "computed" ? " " : ""}`}
+                    value={panenSummary?.avg_fcr && Number.isFinite(panenSummary.avg_fcr) ? panenSummary.avg_fcr.toFixed(2) : '-'}
+                    hint={`Harga jual rata-rata: ${panenSummary?.avg_harga_jual && Number.isFinite(panenSummary.avg_harga_jual) ? formatRp(panenSummary.avg_harga_jual) : '-'}${panenSummary._source === 'computed' ? ' ' : ''}`}
                     accent="#F97316"
                   />
                 </Grid>
@@ -754,9 +638,9 @@ export default function Dashboard() {
                 p: { xs: 1.25, sm: 2 },
                 mb: { xs: 2, sm: 3 },
                 borderRadius: 3,
-                backgroundColor: "#fff",
-                border: "1px solid #f1f1f4",
-                boxShadow: "0 1px 2px rgba(16,24,40,0.04)",
+                backgroundColor: '#fff',
+                border: '1px solid #f1f1f4',
+                boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
               }}
             >
               <Grid container spacing={2}>
@@ -768,37 +652,22 @@ export default function Dashboard() {
                       p: { xs: 2, sm: 2.5 },
                       borderRadius: 3,
                       mb: 2,
-                      background: "transparent",
-                      border: "1px solid transparent",
-                      boxShadow: "none",
+                      background: 'transparent',
+                      border: '1px solid transparent',
+                      boxShadow: 'none',
                     }}
                   >
-                    <Stack
-                      direction={{ xs: "column", sm: "row" }}
-                      alignItems={{ xs: "flex-start", sm: "center" }}
-                      justifyContent="space-between"
-                      spacing={1}
-                      sx={{ mb: 1 }}
-                    >
+                    <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1} sx={{ mb: 1 }}>
                       <Typography variant="subtitle1" fontWeight={700}>
                         Analytics (8 bulan terakhir)
                       </Typography>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ flexWrap: "wrap", rowGap: 0.5, columnGap: 0.5 }}
-                      >
+                      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 0.5, columnGap: 0.5 }}>
                         <Chip size="small" icon={<TrendingUpOutlinedIcon />} label="Pemasukan" />
-                        <Chip
-                          size="small"
-                          icon={<TrendingDownOutlinedIcon />}
-                          label="Pengeluaran"
-                          color="default"
-                        />
+                        <Chip size="small" icon={<TrendingDownOutlinedIcon />} label="Pengeluaran" color="default" />
                       </Stack>
                     </Stack>
                     <Divider sx={{ mb: 2 }} />
-                    <Box sx={{ width: "100%", height: { xs: 220, sm: 280, md: 320 } }}>
+                    <Box sx={{ width: '100%', height: { xs: 220, sm: 280, md: 320 } }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={monthlyBar}>
                           <CartesianGrid stroke="#eee" vertical={false} />
@@ -818,18 +687,12 @@ export default function Dashboard() {
                     sx={{
                       p: { xs: 2, sm: 2.5 },
                       borderRadius: 3,
-                      background: "transparent",
-                      border: "1px solid transparent",
-                      boxShadow: "none",
+                      background: 'transparent',
+                      border: '1px solid transparent',
+                      boxShadow: 'none',
                     }}
                   >
-                    <Stack
-                      direction={{ xs: "column", sm: "row" }}
-                      alignItems={{ xs: "flex-start", sm: "center" }}
-                      justifyContent="space-between"
-                      spacing={1}
-                      sx={{ mb: 1 }}
-                    >
+                    <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1} sx={{ mb: 1 }}>
                       <Typography variant="subtitle1" fontWeight={700}>
                         Top 5 Kolam Paling Mahal
                       </Typography>
@@ -837,9 +700,9 @@ export default function Dashboard() {
                         variant="outlined"
                         label={`Total Nilai Aset Kolam: ${formatRp(totalAsetKolam)}`}
                         sx={{
-                          borderColor: "rgba(124,58,237,0.35)",
-                          color: "#7C3AED",
-                          bgcolor: "transparent",
+                          borderColor: 'rgba(124,58,237,0.35)',
+                          color: '#7C3AED',
+                          bgcolor: 'transparent',
                         }}
                       />
                     </Stack>
@@ -856,7 +719,7 @@ export default function Dashboard() {
                         ))}
                       </Stack>
                     ) : (
-                      <TableContainer sx={{ overflowX: "auto" }}>
+                      <TableContainer sx={{ overflowX: 'auto' }}>
                         <Table size="small" sx={{ minWidth: 760 }}>
                           <TableHead>
                             <TableRow>
@@ -887,9 +750,9 @@ export default function Dashboard() {
                       p: { xs: 2, sm: 2.5 },
                       borderRadius: 3,
                       mb: 2,
-                      background: "#fff",
-                      border: "1px solid #f1f1f4",
-                      boxShadow: "0 1px 2px rgba(16,24,40,0.04)",
+                      background: '#fff',
+                      border: '1px solid #f1f1f4',
+                      boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
                     }}
                   >
                     <Typography variant="subtitle2" color="text.secondary">
@@ -925,14 +788,14 @@ export default function Dashboard() {
                       p: { xs: 2, sm: 2.5 },
                       borderRadius: 3,
                       mb: 2,
-                      background: "#fff",
-                      border: "1px solid #f1f1f4",
-                      boxShadow: "0 1px 2px rgba(16,24,40,0.04)",
+                      background: '#fff',
+                      border: '1px solid #f1f1f4',
+                      boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
                     }}
                   >
                     <Typography variant="subtitle2" color="text.secondary">
                       Snapshot Panen
-                      {panenSummary._source === "computed" ? " (computed)" : ""}
+                      {panenSummary._source === 'computed' ? ' (computed)' : ''}
                     </Typography>
                     <Stack spacing={1} sx={{ mt: 1 }}>
                       <Stack direction="row" justifyContent="space-between">
@@ -944,7 +807,7 @@ export default function Dashboard() {
                       <Stack direction="row" justifyContent="space-between">
                         <Typography variant="body2">Total Berat</Typography>
                         <Typography variant="body2" fontWeight={700}>
-                          {toNum(panenSummary.total_berat, 0).toLocaleString("id-ID")} kg
+                          {toNum(panenSummary.total_berat, 0).toLocaleString('id-ID')} kg
                         </Typography>
                       </Stack>
                       <Stack direction="row" justifyContent="space-between">
@@ -955,15 +818,7 @@ export default function Dashboard() {
                       </Stack>
                       <Stack direction="row" justifyContent="space-between">
                         <Typography variant="body2">Total Laba/Rugi</Typography>
-                        <Typography
-                          variant="body2"
-                          fontWeight={700}
-                          color={
-                            toNum(panenSummary.total_laba_rugi, 0) >= 0
-                              ? "success.main"
-                              : "error.main"
-                          }
-                        >
+                        <Typography variant="body2" fontWeight={700} color={toNum(panenSummary.total_laba_rugi, 0) >= 0 ? 'success.main' : 'error.main'}>
                           {formatRp(panenSummary.total_laba_rugi || 0)}
                         </Typography>
                       </Stack>
@@ -975,9 +830,9 @@ export default function Dashboard() {
                     sx={{
                       p: { xs: 2, sm: 2.5 },
                       borderRadius: 3,
-                      background: "#fff",
-                      border: "1px solid #f1f1f4",
-                      boxShadow: "0 1px 2px rgba(16,24,40,0.04)",
+                      background: '#fff',
+                      border: '1px solid #f1f1f4',
+                      boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
                     }}
                   >
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -996,27 +851,16 @@ export default function Dashboard() {
               sx={{
                 p: { xs: 1.25, sm: 2.5 },
                 borderRadius: 3,
-                backgroundColor: "#fff",
-                border: "1px solid #f1f1f4",
-                boxShadow: "0 1px 2px rgba(16,24,40,0.04)",
+                backgroundColor: '#fff',
+                border: '1px solid #f1f1f4',
+                boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
               }}
             >
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                alignItems={{ xs: "flex-start", sm: "center" }}
-                justifyContent="space-between"
-                spacing={1}
-                sx={{ mb: 1 }}
-              >
+              <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1} sx={{ mb: 1 }}>
                 <Typography variant="subtitle1" fontWeight={700}>
                   Transaksi Terbaru
                 </Typography>
-                <Chip
-                  icon={<ListAltOutlinedIcon />}
-                  size="small"
-                  label={`${transactions.length} data`}
-                  sx={{ alignSelf: { xs: "flex-start", sm: "center" } }}
-                />
+                <Chip icon={<ListAltOutlinedIcon />} size="small" label={`${transactions.length} data`} sx={{ alignSelf: { xs: 'flex-start', sm: 'center' } }} />
               </Stack>
               <Divider sx={{ mb: 1.5 }} />
 
@@ -1024,22 +868,19 @@ export default function Dashboard() {
                 <Stack spacing={1}>
                   {(transactions || []).slice(0, 8).map((t, i) => {
                     const jumlah = toNum(t.jumlah ?? t.amount, 0);
-                    const isOut = String(t.kategori ?? t.tipe ?? "").toLowerCase().includes("pengeluaran");
+                    const isOut = String(t.kategori ?? t.tipe ?? '')
+                      .toLowerCase()
+                      .includes('pengeluaran');
                     return (
                       <Paper key={i} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
                         <Stack direction="row" justifyContent="space-between" alignItems="center">
                           <Typography variant="subtitle2" fontWeight={700}>
-                            {String(t.tanggal ?? t.created_at ?? "-")}
+                            {String(t.tanggal ?? t.created_at ?? '-')}
                           </Typography>
-                          <Chip
-                            size="small"
-                            label={t.kategori ?? t.tipe ?? "-"}
-                            color={isOut ? "warning" : "success"}
-                            variant="outlined"
-                          />
+                          <Chip size="small" label={t.kategori ?? t.tipe ?? '-'} color={isOut ? 'warning' : 'success'} variant="outlined" />
                         </Stack>
                         <Typography variant="body2" sx={{ mt: 0.5 }}>
-                          {t.deskripsi ?? t.description ?? t.keterangan ?? "-"}
+                          {t.deskripsi ?? t.description ?? t.keterangan ?? '-'}
                         </Typography>
                         <Stack direction="row" justifyContent="flex-end">
                           <Typography variant="subtitle2" fontWeight={800}>
@@ -1056,7 +897,7 @@ export default function Dashboard() {
                   )}
                 </Stack>
               ) : (
-                <TableContainer sx={{ overflowX: "auto" }}>
+                <TableContainer sx={{ overflowX: 'auto' }}>
                   <Table size="small" sx={{ minWidth: 560 }}>
                     <TableHead>
                       <TableRow>
@@ -1069,9 +910,9 @@ export default function Dashboard() {
                     <TableBody>
                       {(transactions || []).slice(0, 8).map((t, i) => (
                         <TableRow key={i}>
-                          <TableCell>{String(t.tanggal ?? t.created_at ?? "-")}</TableCell>
-                          <TableCell>{t.kategori ?? t.tipe ?? "-"}</TableCell>
-                          <TableCell>{t.deskripsi ?? t.description ?? t.keterangan ?? "-"}</TableCell>
+                          <TableCell>{String(t.tanggal ?? t.created_at ?? '-')}</TableCell>
+                          <TableCell>{t.kategori ?? t.tipe ?? '-'}</TableCell>
+                          <TableCell>{t.deskripsi ?? t.description ?? t.keterangan ?? '-'}</TableCell>
                           <TableCell align="right">{formatRp(toNum(t.jumlah ?? t.amount, 0))}</TableCell>
                         </TableRow>
                       ))}

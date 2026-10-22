@@ -34,6 +34,10 @@ class AssignPetaniMultiCreate(BaseModel):
     petani_id: int
     kolam_ids: List[int]
 
+class CalibrationRequest(BaseModel):
+    ph: int
+    voltage: float
+
 def capture_activity(
     db: Session,
     current_user: models.User | None,
@@ -92,7 +96,6 @@ def capture_activity(
     # TIDAK db.commit() di sini → biar ikut transaksi endpoint
     return act
 
-
 # ==========================
 # INIT & DB
 # ==========================
@@ -106,7 +109,7 @@ app = FastAPI(title="Budidaya Lele API (All-in-One)")
 logging.basicConfig(
     filename="activity.log",       # log disimpan di file activity.log
     level=logging.INFO,
-    format="%(asctime)s | %(message)s",
+    format="%(asctime)s | user: %(user)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M"
 )
 
@@ -119,7 +122,7 @@ def log_action(user: str, action: str, detail: str):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -134,12 +137,10 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 def hash_password(password: str) -> str:
-    # Bcrypt limit is 72 bytes
-    return pwd_context.hash(password[:72])
+    return pwd_context.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    # Bcrypt limit is 72 bytes
-    return pwd_context.verify(plain_password[:72], hashed_password)
+    return pwd_context.verify(plain_password, hashed_password)
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
@@ -195,30 +196,9 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     return {
         "access_token": token,
         "token_type": "bearer",
-        "role": user.role,
+        "role": user.role,         # <-- tambahkan koma
         "username": user.username
     }
-
-@app.get("/users", response_model=List[schemas.UserResponse])
-def get_users(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    if current_user.role not in ["admin", "pemilik"]:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    return db.query(models.User).all()
-
-class RoleUpdate(BaseModel):
-    role: str
-
-@app.patch("/users/{user_id}/role", response_model=schemas.UserResponse)
-def update_user_role(user_id: int, payload: RoleUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    if current_user.role not in ["admin", "pemilik"]:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User tidak ditemukan")
-    user.role = payload.role
-    db.commit()
-    db.refresh(user)
-    return user
 
 # ==========================
 # KOLAM ENDPOINTS
@@ -352,6 +332,171 @@ def update_kolam(
 
     db.commit()
     db.refresh(kolam)
+
+# ============================
+#  🔥 Kalibrasi Sensor
+# ============================
+@app.get("/calibration/ph/esp")
+def get_calibration_for_esp(db: Session = Depends(get_db)):
+    calibration = db.query(models.CalibrationPH).first()
+
+    if not calibration:
+        return {
+            "m1": None,
+            "b1": None,
+            "m2": None,
+            "b2": None
+        }
+
+    return {
+        "m1": calibration.m1,
+        "b1": calibration.b1,
+        "m2": calibration.m2,
+        "b2": calibration.b2
+    }
+@app.get("/sensor-calibration-ESP/latest")
+def get_sensor_calibration_latest(db: Session = Depends(get_db)):
+    data = db.query(models.SensorCalibrationData)\
+        .order_by(models.SensorCalibrationData.waktu.desc())\
+        .first()
+
+    if not data:
+        return {
+            "ph": None,
+            "suhu": None,
+            "voltage": None,
+            "created_at": None
+        }
+
+    return {
+        "ph": data.ph,
+        "suhu": data.suhu,
+        "voltage": data.voltage,
+        "created_at": data.waktu
+    }
+
+@app.post("/sensor-calibration-ESP")
+def insert_sensor_calibration(data: dict, db: Session = Depends(get_db)):
+    new_data = models.SensorCalibrationData(
+        ph=data.get("ph"),
+        suhu=data.get("suhu"),
+        oksigen=data.get("oksigen"),
+        voltage=data.get("voltage")
+    )
+
+    db.add(new_data)
+    db.commit()
+    db.refresh(new_data)
+
+    return new_data
+
+
+@app.post("/calibration/ph")
+def calibrate_ph(payload: CalibrationRequest, db: Session = Depends(get_db)):
+    ph = payload.ph
+    voltage = payload.voltage
+
+    # ✅ validasi input
+    if voltage is None:
+        raise HTTPException(status_code=400, detail="Voltage wajib diisi")
+
+    if ph not in [4, 7, 9]:
+        raise HTTPException(status_code=400, detail="pH harus 4, 7, atau 9")
+
+    # ambil / buat data calibration global
+    calibration = db.query(models.CalibrationPH).first()
+
+    if not calibration:
+        calibration = models.CalibrationPH()
+        db.add(calibration)
+        db.commit()
+        db.refresh(calibration)
+
+    # ✅ simpan titik kalibrasi
+    if ph == 4:
+        calibration.ph4 = voltage
+    elif ph == 7:
+        calibration.ph7 = voltage
+    elif ph == 9:
+        calibration.ph9 = voltage
+
+    # ✅ kalau sudah lengkap → hitung
+    if (
+        calibration.ph4 is not None and
+        calibration.ph7 is not None and
+        calibration.ph9 is not None
+    ):
+        v4 = calibration.ph4
+        v7 = calibration.ph7
+        v9 = calibration.ph9
+
+        # 🔥 ANTI ERROR WAJIB
+        if v7 == v4 or v9 == v7:
+            raise HTTPException(
+                status_code=400,
+                detail="Voltage tidak valid (tidak boleh sama)"
+            )
+
+        # ✅ hitung kalibrasi
+        m1 = (7 - 4) / (v7 - v4)
+        b1 = 7 - (m1 * v7)
+
+        m2 = (9 - 7) / (v9 - v7)
+        b2 = 7 - (m2 * v7)
+
+        # simpan
+        calibration.m1 = m1
+        calibration.b1 = b1
+        calibration.m2 = m2
+        calibration.b2 = b2
+        calibration.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(calibration)
+
+    # ✅ response lebih clean & informatif
+    return {
+        "ph4": calibration.ph4,
+        "ph7": calibration.ph7,
+        "ph9": calibration.ph9,
+        "m1": calibration.m1,
+        "b1": calibration.b1,
+        "m2": calibration.m2,
+        "b2": calibration.b2,
+        "is_calibrated": all([
+            calibration.ph4 is not None,
+            calibration.ph7 is not None,
+            calibration.ph9 is not None
+        ]),
+        "updated_at": calibration.updated_at
+    }
+
+@app.get("/calibration/ph")
+def get_calibration(db: Session = Depends(get_db)):
+    calibration = db.query(models.CalibrationPH).first()
+
+    if not calibration:
+        return {
+            "ph4": None,
+            "ph7": None,
+            "ph9": None,
+            "m1": None,
+            "b1": None,
+            "m2": None,
+            "b2": None
+        }
+
+    return {
+        "ph4": calibration.ph4,
+        "ph7": calibration.ph7,
+        "ph9": calibration.ph9,
+        "m1": calibration.m1,
+        "b1": calibration.b1,
+        "m2": calibration.m2,
+        "b2": calibration.b2,
+        "updated_at": calibration.updated_at
+    }
+
 
     # ============================
     #  🔥 KOREKSI FINANCIAL LOGIC
@@ -1777,109 +1922,117 @@ class AddFishToKolam(BaseModel):
 from sqlalchemy import inspect
 
 
+import traceback
+
 @app.post("/kolam/{kolam_id}/add_fish", response_model=schemas.IsiKolamResponse)
-def add_fish_to_kolam_alias(kolam_id: int, payload: AddFishToKolam, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def add_fish_to_kolam_alias(
+    kolam_id: int,
+    payload: AddFishToKolam,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    try:
+        print("🚀 MASUK ADD FISH")
 
-    kolam = db.query(models.Kolam).filter(models.Kolam.id == kolam_id).first()
-    if not kolam:
-        raise HTTPException(status_code=404, detail="Kolam tidak ditemukan")
+        kolam = db.query(models.Kolam).filter(models.Kolam.id == kolam_id).first()
+        if not kolam:
+            raise HTTPException(status_code=404, detail="Kolam tidak ditemukan")
 
-    # cek hak akses petani
-    if current_user.role == "petani":
-        assigned = db.query(models.PemilikPetaniKolam).filter(
-            models.PemilikPetaniKolam.kolam_id == kolam_id,
-            models.PemilikPetaniKolam.petani_id == current_user.id
+        if current_user.role == "petani":
+            assigned = db.query(models.PemilikPetaniKolam).filter(
+                models.PemilikPetaniKolam.kolam_id == kolam_id,
+                models.PemilikPetaniKolam.petani_id == current_user.id
+            ).first()
+            if not assigned:
+                raise HTTPException(status_code=403, detail="Forbidden")
+
+        master_ikan = db.query(models.FishStock)\
+            .options(joinedload(models.FishStock.vendor))\
+            .filter(
+                models.FishStock.id == payload.ikan_id,
+                models.FishStock.quantity >= payload.jumlah_ekor
+            ).first()
+
+        if not master_ikan:
+            raise HTTPException(status_code=404, detail="Stock ikan tidak cukup atau tidak ditemukan")
+
+        total_kg = payload.total_kg
+        if total_kg is None:
+            if master_ikan.total_kg and master_ikan.quantity:
+                total_kg = (payload.jumlah_ekor / master_ikan.quantity) * float(master_ikan.total_kg)
+            else:
+                total_kg = 0
+
+        # kurangi stok
+        master_ikan.quantity -= payload.jumlah_ekor
+        if master_ikan.total_kg:
+            master_ikan.total_kg = max(0, float(master_ikan.total_kg) - float(total_kg or 0))
+
+        db.commit()
+        db.refresh(master_ikan)
+
+        existing = db.query(models.IsiKolam).filter(
+            models.IsiKolam.kolam_id == kolam_id,
+            models.IsiKolam.ikan_id == payload.ikan_id
         ).first()
-        if not assigned:
-            raise HTTPException(status_code=403, detail="Forbidden")
 
-    # === Jika kolam benar-benar kosong (tidak ada IsiKolam) -> PASTIKAN semua log lama dibersihkan ===
-    # if db.query(models.IsiKolam).filter(models.IsiKolam.kolam_id == kolam_id).count() == 0:
-    #     _clear_all_kolam_logs(db, kolam_id)
-    #     db.commit()
+        vendor_name = master_ikan.vendor.name if master_ikan.vendor else None
 
-    # Ambil master stock + vendor
-    master_ikan = db.query(models.FishStock).options(joinedload(models.FishStock.vendor)).filter(
-        models.FishStock.id == payload.ikan_id,
-        models.FishStock.quantity >= payload.jumlah_ekor
-    ).first()
-    if not master_ikan:
-        raise HTTPException(status_code=404, detail="Stock ikan tidak cukup atau tidak ditemukan")
-
-    total_kg = payload.total_kg
-    if total_kg is None:
-        if master_ikan.total_kg and master_ikan.quantity:
-            total_kg = (payload.jumlah_ekor / master_ikan.quantity) * float(master_ikan.total_kg)
+        if existing:
+            existing.jumlah_ekor = (existing.jumlah_ekor or 0) + payload.jumlah_ekor
+            existing.total_kg = float(existing.total_kg or 0) + float(total_kg or 0)
+            db.commit()
+            db.refresh(existing)
         else:
-            total_kg = 0
+            new_entry = models.IsiKolam(
+                kolam_id=kolam_id,
+                ikan_id=payload.ikan_id,
+                tanggal_masuk=get_now_wib(),
+                jumlah_ekor=payload.jumlah_ekor,
+                total_kg=total_kg,
+                harga_per_kg_snapshot=master_ikan.price_per_kg,
+                harga_per_unit_snapshot=master_ikan.price_per_unit,
+                ukuran_ikan_snapshot=master_ikan.size,
+                vendor_name_snapshot=vendor_name,
+                feed_kg_accum=0,
+                vitamin_kg_accum=0,
+            )
+            db.add(new_entry)
+            db.commit()
+            db.refresh(new_entry)
+            existing = new_entry
 
-    # kurangi stok
-    master_ikan.quantity -= payload.jumlah_ekor
-    if master_ikan.total_kg:
-        master_ikan.total_kg = max(0, float(master_ikan.total_kg) - total_kg)
-    db.commit()
-    db.refresh(master_ikan)
+        if kolam.status != "Sedang Pemeliharaan":
+            kolam.status = "Sedang Pemeliharaan"
+            db.commit()
 
-    # insert/update isi_kolam
-    existing = db.query(models.IsiKolam).filter(
-        models.IsiKolam.kolam_id == kolam_id,
-        models.IsiKolam.ikan_id == payload.ikan_id
-    ).first()
-
-    vendor_name = master_ikan.vendor.name if master_ikan.vendor else None
-
-    if existing:
-        existing.jumlah_ekor += payload.jumlah_ekor
-        existing.total_kg = (existing.total_kg or 0) + total_kg
-        db.commit()
-        db.refresh(existing)
-    else:
-        # tentukan harga snapshot sesuai tipe harga
-        harga_per_kg_snapshot = master_ikan.price_per_kg if master_ikan.price_per_kg else None
-        harga_per_unit_snapshot = master_ikan.price_per_unit if master_ikan.price_per_unit else None
-
-        new_entry = models.IsiKolam(
+        # 🔥 CANDIDATE ERROR
+        capture_activity(
+            db, current_user,
+            jenis="ikan", aksi="ADD_FISH",
+            deskripsi=f"{master_ikan.species} masuk ke {kolam.name}",
             kolam_id=kolam_id,
+            isi_kolam_id=existing.id,
             ikan_id=payload.ikan_id,
-            tanggal_masuk=get_now_wib(),
-            jumlah_ekor=payload.jumlah_ekor,
-            total_kg=total_kg,
-            harga_per_kg_snapshot=harga_per_kg_snapshot,
-            harga_per_unit_snapshot=harga_per_unit_snapshot,
-            ukuran_ikan_snapshot=master_ikan.size,
-            vendor_name_snapshot=vendor_name,
-            feed_kg_accum=0,
-            vitamin_kg_accum=0,
+            qty_ekor=payload.jumlah_ekor,
+            berat_kg=float(total_kg or 0),
+            biaya=None, pendapatan=None, saldo_delta=None,
+            meta={
+                "vendor": vendor_name,
+                "harga_per_kg_snapshot": float(existing.harga_per_kg_snapshot or 0),
+                "harga_per_unit_snapshot": float(existing.harga_per_unit_snapshot or 0)
+            }
         )
-        db.add(new_entry)
-        db.commit()
-        db.refresh(new_entry)
-        existing = new_entry
 
-    if kolam.status != "Sedang Pemeliharaan":
-        kolam.status = "Sedang Pemeliharaan"
-        db.add(kolam)
         db.commit()
 
-    log_action(current_user.username, "add fish", f"{master_ikan.species} masuk kolam {kolam.name}, qty {payload.jumlah_ekor}, total_kg {total_kg}")
+        print("✅ SUCCESS ADD FISH")
+        return existing
 
-    capture_activity(
-        db, current_user,
-        jenis="ikan", aksi="ADD_FISH",
-        deskripsi=f"{master_ikan.species} masuk ke {kolam.name}",
-        kolam_id=kolam_id,
-        isi_kolam_id=existing.id,
-        ikan_id=payload.ikan_id,
-        qty_ekor=payload.jumlah_ekor,
-        berat_kg=float(total_kg or 0),
-        biaya=None, pendapatan=None, saldo_delta=None,
-        meta={"vendor": vendor_name, "harga_per_kg_snapshot": float(existing.harga_per_kg_snapshot or 0),
-            "harga_per_unit_snapshot": float(existing.harga_per_unit_snapshot or 0)}
-    )
-
-    db.commit()
-
-    return existing
+    except Exception as e:
+        print("❌ ERROR ADD FISH:", str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 from sqlalchemy.orm import joinedload
 
@@ -2720,6 +2873,22 @@ def delete_pemberian_pakan(
     db.delete(pemberian)
     db.commit()
     return {"status": "ok"}
+
+@app.get("/growth_log/{kolam_id}")
+def get_growth_log(kolam_id: int, db: Session = Depends(get_db)):
+    logs = db.query(models.GrowthLog)\
+        .filter(models.GrowthLog.kolam_id == kolam_id)\
+        .order_by(models.GrowthLog.tanggal.asc())\
+        .all()
+
+    return [
+        {
+            "tanggal": log.tanggal,
+            "total_kg": float(log.total_kg or 0),
+            "berat_rata_ekor": float(log.berat_rata_ekor or 0)
+        }
+        for log in logs
+    ]
 
 
 @app.post("/mortality", response_model=schemas.MortalityResponse)

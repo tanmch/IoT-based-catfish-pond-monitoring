@@ -254,6 +254,14 @@ class FishMortality(Base):
     isi_kolam = relationship("IsiKolam", backref="fish_mortalities")
 
 # ========== Sensor ===============
+from datetime import datetime, timezone
+import pytz
+
+jakarta = pytz.timezone("Asia/Jakarta")
+
+def now_wib():
+    return datetime.now(jakarta)
+
 class SensorData(Base):
     __tablename__ = "sensor_data"
 
@@ -264,11 +272,36 @@ class SensorData(Base):
     ph = Column(Float, nullable=True)
     oksigen = Column(Float, nullable=True)     # ✅ TAMBAH INI
 
-    waktu = Column(
-    DateTime,
-    default=lambda: datetime.now(jakarta))
+    waktu = Column(DateTime, default=now_wib)
 
     kolam = relationship("Kolam")
+
+# ========== KALIBRASI SENSOR ===============
+class SensorCalibrationData(Base):
+    __tablename__ = "sensor_calibration_data"
+
+    id = Column(Integer, primary_key=True, index=True)
+    kolam_id = Column(Integer)
+    suhu = Column(Float)
+    ph = Column(Float)
+    oksigen = Column(Float)
+
+    voltage = Column(Float)   # 🔥 TAMBAHAN INI
+
+    waktu = Column(DateTime, default=datetime.utcnow)
+
+class CalibrationPH(Base):
+    __tablename__ = "calibration_ph"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ph4 = Column(Float)
+    ph7 = Column(Float)
+    ph9 = Column(Float)
+    m1 = Column(Float)
+    b1 = Column(Float)
+    m2 = Column(Float)
+    b2 = Column(Float)
+    updated_at = Column(DateTime, default=datetime.utcnow)
 
 # ========== KONTROL AKTUATOR ===============
 class DeviceControl(Base):
@@ -280,7 +313,7 @@ class DeviceControl(Base):
     pompa = Column(Integer, default=0)  # 0 mati, 1 nyala
     valve = Column(Integer, default=0)
 
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
 
 class PemberianPakan(Base):
     __tablename__ = "pemberian_pakan"
@@ -395,11 +428,16 @@ except Exception:
     # fallback aman untuk MariaDB; JSON hanya alias longtext
     from sqlalchemy import Text as JSONType
 
+jakarta = pytz.timezone("Asia/Jakarta")
+
+def now_wib():
+    return datetime.now(jakarta)
+
 class Aktivitas(Base):
     __tablename__ = "aktivitas"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    waktu = Column(DateTime, nullable=False)  # set dari app: get_now_wib()
+    waktu = Column(DateTime, default=now_wib, nullable=False)  # set dari app: get_now_wib()
 
     user_id = Column(Integer, nullable=True)
     username_snap = Column(String(100), nullable=True)

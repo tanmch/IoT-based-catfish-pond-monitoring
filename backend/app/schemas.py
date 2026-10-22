@@ -245,7 +245,15 @@ class FeedOut(FeedBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-
+# ==========================
+# SENSOR CALIBRATION
+# ==========================
+class SensorDataCalibrationCreate(BaseModel):
+    kolam_id: int
+    temperature: float
+    ph: float
+    dissolved_oxygen: float
+    voltage: float   # 🔥 TAMBAH
 # ==========================
 # FEED LOG SCHEMAS
 # ==========================

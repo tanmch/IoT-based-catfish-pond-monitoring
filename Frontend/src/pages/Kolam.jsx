@@ -37,9 +37,11 @@ import Layout from '../components/Layout';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+/* ---------- Kalibrasi Sensor ---------- */
+const API_BASE = 'http://103.103.22.213/api';
+
 const DEFAULT_STATUS = 'Kosong';
 const STATUS_OPTIONS = ['Kosong', 'Sedang Pemeliharaan'];
-const API_BASE = 'http://127.0.0.1:8000';
 
 /* ---------- Utils waktu ---------- */
 const toHHmm = (val) => {
@@ -250,6 +252,97 @@ export default function Kolam() {
     panenKeterangan: '',
     panenVendorId: '',
   });
+
+  const [activeKolamId, setActiveKolamId] = useState(null);
+  const [pompaNyala, setPompaNyala] = useState(false);
+  const [valveTerbuka, setValveTerbuka] = useState(false);
+
+  useEffect(() => {
+    if (kolamData.length > 0) {
+      setActiveKolamId(kolamData[0].id); // ambil kolam pertama
+    }
+  }, [kolamData]);
+
+  /* ---------- Kalibrasi Sensor ---------- */
+  const [sensorCalibrationData, setSensorCalibrationData] = useState(null);
+  const [loadingSensorCalibration, setLoadingSensorCalibration] = useState(false);
+  const [calibration, setCalibrationData] = useState(null);
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationStep, setCalibrationStep] = useState(null);
+
+  const fetchCalibration = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/calibration/ph`);
+      console.log('Calibration:', res.data);
+      setCalibrationData(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchSensorCalibrationESP = async () => {
+    try {
+      setLoadingSensorCalibration(true);
+
+      const res = await axios.get(`${API_BASE}/sensor-calibration-ESP/latest`);
+
+      setSensorCalibrationData(res.data);
+    } catch (err) {
+      console.error('Gagal ambil sensor:', err);
+      setSensorCalibrationData(null);
+    } finally {
+      setLoadingSensorCalibration(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSensorCalibrationESP();
+
+    const interval = setInterval(() => {
+      fetchSensorCalibrationESP();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const sendControlUniversal = async (pompa, valve) => {
+    const token = localStorage.getItem('token');
+
+    for (const kolam of kolamData) {
+      await fetch(`${API_BASE}/kolam/control/${kolam.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          pompa: pompa ? 1 : 0,
+          valve: valve ? 1 : 0,
+        }),
+      });
+    }
+  };
+
+  const fetchControlStatus = async () => {
+    if (!kolamData.length) return;
+
+    const token = localStorage.getItem('token');
+
+    const res = await fetch(`${API_BASE}/kolam/control/${kolamData[0].id}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await res.json();
+
+    setPompaNyala(data.pompa === 1);
+    setValveTerbuka(data.valve === 1);
+  };
+
+  useEffect(() => {
+    fetchControlStatus();
+  }, [kolamData]);
 
   // Notifikasi
   const [notif, setNotif] = useState({ open: false, message: '', severity: 'success' });
@@ -464,7 +557,17 @@ export default function Kolam() {
         const isVitamin = typeRaw === 'vitamin';
         const dt = log.created_at ? new Date(log.created_at) : null;
         const tanggalStr = log.tanggal ? new Date(log.tanggal).toLocaleDateString() : dt ? dt.toLocaleDateString() : '-';
-        const waktuStr = log.waktu ? toHHmm(log.waktu) : dt ? dt.toLocaleTimeString() : '-';
+        const waktuStr = dt
+          ? dt.toLocaleString('id-ID', {
+              day: 'numeric',
+              month: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false,
+            })
+          : '-';
 
         const jumlahKg = Number(log.jumlah_kg || 0);
 
@@ -509,10 +612,21 @@ export default function Kolam() {
         const waktu = log.waktu ? `1970-01-01T${log.waktu}` : null;
         const ts = tanggal ? new Date(tanggal.toISOString().slice(0, 10) + 'T' + (log.waktu || '00:00')).getTime() : Date.now();
         const qty = Number(log.jumlah_mati || 0);
+        const dtFull = tanggal && log.waktu ? new Date(tanggal.toISOString().slice(0, 10) + 'T' + log.waktu) : null;
         return {
           ts,
           tanggal: tanggal ? tanggal.toLocaleDateString() : '-',
-          waktu: log.waktu ? new Date(waktu).toLocaleTimeString() : '-',
+          waktu: dtFull
+            ? dtFull.toLocaleString('id-ID', {
+                day: 'numeric',
+                month: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+              })
+            : '-',
           jenis: 'Mortalitas',
           nama: '-',
           // untuk kompat editor lama:
@@ -547,7 +661,19 @@ export default function Kolam() {
           const rawDate = a.waktu || a.created_at;
           const dt = rawDate ? new Date(rawDate) : null;
           const tanggalStr = dt ? dt.toLocaleDateString() : '-';
-          const waktuStr = dt ? dt.toLocaleTimeString() : '-';
+          const waktuStr = dt
+            ? dt
+                .toLocaleString('id-ID', {
+                  day: 'numeric',
+                  month: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false,
+                })
+                .replace(':', '.')
+            : '-';
 
           let jenisLabel = 'Aktivitas';
           if (a.jenis === 'ikan') jenisLabel = 'Tambah Ikan';
@@ -1042,6 +1168,41 @@ export default function Kolam() {
     setSelectedKolamId(null);
   };
 
+  const handleCalibration = async (ph) => {
+    setIsCalibrating(true);
+    setCalibrationStep(ph);
+
+    try {
+      // ⏳ Tunggu sensor stabil (misal 3 detik)
+      await new Promise((resolve) => setTimeout(resolve, 6000));
+
+      // 🔄 Ambil data terbaru dari sensor
+      const res = await axios.get(`${API_BASE}/sensor-calibration-ESP/latest`);
+      const latest = res.data;
+
+      if (!latest?.voltage) {
+        alert('Voltage tidak tersedia!');
+        return;
+      }
+
+      // 🚀 Kirim ke backend
+      await axios.post(`${API_BASE}/calibration/ph`, {
+        ph: ph,
+        voltage: latest.voltage,
+      });
+
+      alert(`Kalibrasi pH ${ph} berhasil`);
+
+      // 🔄 Refresh data kalibrasi
+      fetchCalibration();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsCalibrating(false);
+      setCalibrationStep(null);
+    }
+  };
+
   const handleDeleteKolam = async () => {
     if (!selectedKolamId) return;
     if (formData.status !== 'Kosong') {
@@ -1212,11 +1373,139 @@ export default function Kolam() {
         </Grid>
       </Grid>
 
+      <Box mb={3}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Box sx={{ borderLeft: (t) => `4px solid ${t.palette.primary.main}`, pl: 2 }}>
+            <Typography variant="h5" fontWeight="bold">
+              Alat Monitoring
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Lakukan Kalibrasi Setiap Akan Memakai Sensor
+            </Typography>
+          </Box>
+        </Stack>
+      </Box>
+
+      {/*Kalibrasi Sensor*/}
+      <Grid container spacing={3} mb={3}>
+        <Grid item xs={12}>
+          <Paper
+            sx={{
+              p: 2.5,
+              borderRadius: 3,
+              backgroundColor: '#fff',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
+              border: '1px solid #f1f1f4',
+            }}
+          >
+            <Typography variant="h6" fontWeight="bold" mb={2}>
+              Kalibrasi Sensor
+            </Typography>
+
+            {/*Sensor Calibration*/}
+            {loadingSensorCalibration ? (
+              <CircularProgress size={24} />
+            ) : sensorCalibrationData ? (
+              <Grid container spacing={3}>
+                <Grid item xs={4}>
+                  <Typography color="text.secondary">pH</Typography>
+                  <Typography variant="h6">{sensorCalibrationData.ph}</Typography>
+                </Grid>
+
+                <Grid item xs={4}>
+                  <Typography color="text.secondary">Voltage</Typography>
+                  <Typography variant="h6">{sensorCalibrationData?.voltage ?? '-'} V</Typography>
+                </Grid>
+
+                <Grid item xs={4}>
+                  <Typography color="text.secondary">Suhu</Typography>
+                  <Typography variant="h6">{sensorCalibrationData.suhu} °C</Typography>
+                </Grid>
+              </Grid>
+            ) : (
+              <Typography color="text.secondary">Tidak ada data sensor</Typography>
+            )}
+
+            {/* Data Kalibrasi */}
+            {calibration && (
+              <Box mt={3}>
+                <Typography fontWeight="bold">Data Voltage Kalibrasi</Typography>
+
+                <Typography>pH 4 : {calibration.ph4 ?? '-'}</Typography>
+                <Typography>pH 7 : {calibration.ph7 ?? '-'}</Typography>
+                <Typography>pH 9 : {calibration.ph9 ?? '-'}</Typography>
+              </Box>
+            )}
+
+            {/*Tombol Kalibrasi*/}
+            <Grid container spacing={2} mt={2}>
+              <Grid item>
+                <Button variant="contained" disabled={isCalibrating} onClick={() => handleCalibration(4)}>
+                  {isCalibrating && calibrationStep === 4 ? 'Mengambil data...' : 'Kalibrasi pH 4'}
+                </Button>
+              </Grid>
+
+              <Grid item>
+                <Button variant="contained" disabled={isCalibrating} onClick={() => handleCalibration(7)}>
+                  {isCalibrating && calibrationStep === 7 ? 'Mengambil data...' : 'Kalibrasi pH 7'}
+                </Button>
+              </Grid>
+
+              <Grid item>
+                <Button variant="contained" disabled={isCalibrating} onClick={() => handleCalibration(9)}>
+                  {isCalibrating && calibrationStep === 9 ? 'Mengambil data...' : 'Kalibrasi pH 9'}
+                </Button>
+              </Grid>
+            </Grid>
+
+            <Typography variant="h6" fontWeight="bold" mb={2} mt={4}>
+              Kontrol Pompa
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="contained"
+                color={pompaNyala ? 'success' : 'error'}
+                onClick={() => {
+                  const newState = !pompaNyala;
+                  setPompaNyala(newState);
+                  sendControlUniversal(newState, valveTerbuka);
+                }}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 2,
+                  fontWeight: 'bold',
+                }}
+              >
+                {pompaNyala ? 'Pompa Nyala' : 'Pompa Mati'}
+              </Button>
+
+              <Button
+                variant="contained"
+                color={valveTerbuka ? 'success' : 'error'}
+                onClick={() => {
+                  const newState = !valveTerbuka;
+                  setValveTerbuka(newState);
+                  sendControlUniversal(pompaNyala, newState);
+                }}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 2,
+                  fontWeight: 'bold',
+                }}
+              >
+                {valveTerbuka ? 'Valve Terbuka' : 'Valve Tertutup'}
+              </Button>
+            </Box>
+          </Paper>
+        </Grid>
+      </Grid>
+
       <Paper
         elevation={0}
         sx={{
           p: 2,
           mb: 3,
+          mt: 3,
           borderRadius: 3,
           background: '#fff',
           border: '1px solid #f1f1f4',
@@ -2057,7 +2346,6 @@ export default function Kolam() {
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ backgroundColor: '#5856d6' }}>
-                    <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Tanggal</TableCell>
                     <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Waktu</TableCell>
                     <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Jenis</TableCell>
                     <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Nama</TableCell>
@@ -2072,7 +2360,6 @@ export default function Kolam() {
                 <TableBody>
                   {combinedLogs.map((log, i) => (
                     <TableRow key={i}>
-                      <TableCell>{log.tanggal}</TableCell>
                       <TableCell>{log.waktu}</TableCell>
                       <TableCell>
                         <Chip size="small" label={log.jenis} color={log.jenis === 'Vitamin' ? 'warning' : log.jenis === 'Mortalitas' ? 'error' : 'default'} variant={log.jenis === 'Pakan' ? 'outlined' : 'filled'} />

@@ -1,0 +1,11 @@
+# === FastAPI stack (root requirements.txt) ===
+fastapi
+uvicorn[standard]
+sqlalchemy>=2
+pymysql            # driver MySQL pure-python (hindari mysqlclient yang compile)
+alembic
+python-dotenv
+python-multipart
+passlib[bcrypt]
+python-jose[cryptography]
+requests
