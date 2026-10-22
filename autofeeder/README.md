@@ -1,0 +1,289 @@
+# AutoFeeder Rail Gantry
+
+Aplikasi web mandiri untuk memantau dan menjalankan **auto-feeder rail gantry**
+pada 20 kolam lele (10 kiri + 10 kanan). Proyek ini terpisah dari aplikasi Fish
+Linker, tetapi disiapkan agar mudah diintegrasikan: FastAPI, MySQL-ready, JWT,
+peran `admin`/`pemilik`/`petani`, waktu WIB, dan UI berbahasa Indonesia.
+
+> Status: siap demo dan uji lapangan terbatas. Belum untuk produksi tanpa
+> pengerasan di [`PLAN.md`](PLAN.md) bagian P8.
+
+## Fitur
+
+- **Dashboard** status gantry, hopper, stok pakan, alarm aktif, jadwal berikutnya,
+  dan grafik telemetri.
+- **Peta 20 kolam** kiri/kanan dengan porsi efektif dan status perangkat.
+- **Jadwal** global, per baris, atau per kolam; porsi gram atau persen biomassa;
+  override per kolam; pause/resume. Hanya jadwal paling spesifik yang berlaku
+  untuk tiap kolam, dan perintah feed dikirim satu per satu mengikuti kapasitas
+  gantry.
+- **Manual feed** dengan konfirmasi, idempotency, validasi stok dan hopper.
+- **Keselamatan**: E-stop, home, reset/validasi keamanan, command expiry.
+- **Monitoring perangkat**: telemetry suhu, kelembapan, tekanan, daya, level
+  hopper, status online/offline.
+- **Alarm** suhu, kelembapan, hopper low/empty, tegangan, offline, command
+  expired, kegagalan feeding; acknowledge/resolve.
+- **Riwayat** target vs aktual, filter, ekspor CSV, halaman cetak.
+- **Audit trail** perubahan jadwal, feeding manual, aksi perangkat, pengguna.
+- **Peran**: petani hanya melihat/mengelola kolam yang ditugaskan.
+- **Offline-first**: perangkat menyimpan jadwal di NVS dan tetap feeding saat
+  server tidak terjangkau (lihat [`docs/DEVICE_API.md`](docs/DEVICE_API.md)).
+
+## Stack
+
+| Lapisan | Teknologi |
+|---|---|
+| Backend | FastAPI, SQLAlchemy 2, Pydantic v2, PyJWT, bcrypt |
+| Database | SQLite (demo) / MySQL 8+ (produksi) |
+| Frontend | React 18, Vite, CSS sederhana (tanpa Material UI) |
+| Perangkat | REST polling + `X-Device-Key` (pola sama dengan Fish Linker) |
+| Waktu | Disimpan UTC, ditampilkan WIB (`Asia/Jakarta`) |
+
+## Menjalankan cepat
+
+Prasyarat: Python 3.11+ dan Node.js 20+.
+
+```bash
+cd autofeeder
+./start.sh
+```
+
+Buka **http://127.0.0.1:8010**. Skrip akan:
+
+1. membuat virtualenv dan memasang dependensi backend;
+2. membuat `backend/.env` dengan secret acak (hanya jika belum ada);
+3. memasang dependensi frontend dan membangun UI;
+4. menjalankan API + UI di port **8010**.
+
+Mode pengembangan:
+
+```bash
+./start.sh --dev      # API :8010 + Vite :5174 (hot reload)
+./start.sh --reload   # API :8010 dengan auto-reload
+```
+
+### Akun demo
+
+| Peran | Username | Password |
+|---|---|---|
+| Admin | `admin` | `Admin#12345` |
+| Pemilik | `pemilik` | `Pemilik#12345` |
+| Petani/operator | `operator` | `Petani#12345` |
+
+**Ganti semua akun dan password demo sebelum produksi.** Seed demo otomatis
+ditolak jika `ENVIRONMENT=production`.
+
+### Menjalankan simulator
+
+Di terminal lain, setelah backend hidup:
+
+```bash
+python3 simulator/device_sim.py
+```
+
+Simulator membaca `DEVICE_API_KEY` dari `backend/.env`, mengirim telemetry,
+menerima command, menggerakkan gantry virtual, mengurangi hopper, dan mengirim
+ACK. Ini memungkinkan uji end-to-end tanpa hardware.
+
+## Setup manual
+
+```bash
+cd autofeeder/backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env
+# edit .env: isi SECRET_KEY dan DEVICE_API_KEY dengan nilai acak
+.venv/bin/uvicorn app.main:app --reload --port 8010
+```
+
+Frontend terpisah:
+
+```bash
+cd autofeeder/frontend
+npm install
+npm run dev        # http://127.0.0.1:5174, proxy /api ke :8010
+npm run build      # hasil di dist/, otomatis disajikan backend
+```
+
+Generate secret:
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+python3 -c "import secrets; print('fg_' + secrets.token_urlsafe(32))"
+```
+
+## Konfigurasi penting
+
+Semua lewat environment atau `backend/.env`. Lihat
+[`backend/.env.example`](backend/.env.example) untuk daftar lengkap.
+
+| Variabel | Default | Keterangan |
+|---|---|---|
+| `ENVIRONMENT` | `development` | `development` / `test` / `production` |
+| `SECRET_KEY` | wajib | minimal 32 karakter acak, dipakai JWT |
+| `DEVICE_API_KEY` | wajib | key perangkat, minimal 24 karakter |
+| `DATABASE_URL` | SQLite | ganti ke `mysql+pymysql://...` untuk MySQL |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | masa berlaku token |
+| `DEVICE_OFFLINE_SECONDS` | `30` | batas detik sebelum perangkat offline |
+| `COMMAND_TTL_SECONDS` | `120` | command kedaluwarsa jika belum di-ACK |
+| `SCHEDULER_TICK_SECONDS` | `5` | interval scheduler |
+| `HOPPER_CAPACITY_KG` | `15` | kapasitas hopper |
+| `GRAMS_PER_ROTATION` | `200` | kalibrasi rotary |
+| `MAX_PORTION_GRAMS` | `10000` | batas porsi jadwal |
+| `MAX_MANUAL_PORTION_GRAMS` | `5000` | batas porsi manual |
+| `SEED_DEMO` | `true` | wajib `false` di production |
+| `PUBLIC_MONITORING` | `false` | endpoint ringkasan publik |
+
+Contoh MySQL:
+
+```env
+DATABASE_URL=mysql+pymysql://feeder_app:password@127.0.0.1:3306/budidaya_lele
+```
+
+Tabel AutoFeeder berprefix `feeder_` sehingga aman berdampingan dengan 22 tabel
+Fish Linker. Detail di [`docs/INTEGRATION.md`](docs/INTEGRATION.md).
+
+## Keamanan
+
+- Secret hanya dari environment; `.env` di-`.gitignore` dan tidak pernah
+  di-commit. Secret lemah ditolak saat startup.
+- Password di-hash bcrypt (cost 12); password > 72 byte di-pre-hash SHA-256 agar
+  tidak terpotong.
+- JWT HS256 60 menit dengan `token_version`; ganti password mencabut token lama.
+- Login dibatasi per IP + identifier (5 percobaan / 10 menit, lockout 15 menit).
+- Perangkat memakai `X-Device-Key` yang disimpan sebagai hash dan dapat dirotasi.
+- Otorisasi dicek di setiap endpoint, termasuk scope kolam untuk petani.
+- Manual feed/E-stop/reset memerlukan konfirmasi dan peran yang tepat.
+- Command memiliki TTL, idempotency key, dan penolakan replay ACK.
+- Security header: CSP, `X-Frame-Options: DENY`, `nosniff`, Referrer-Policy,
+  Permissions-Policy, HSTS saat HTTPS di production.
+- Swagger/OpenAPI dimatikan di production.
+- Audit trail untuk semua aksi sensitif (aktor, peran, IP, WIB, metadata).
+
+**Catatan:** rate limiter disimpan di memori proses. Untuk multi-worker atau
+banyak instance, ganti dengan Redis. Lihat P8 di [`PLAN.md`](PLAN.md).
+
+## Peran & hak akses
+
+| Aksi | Admin | Pemilik | Petani |
+|---|---|---|---|
+| Lihat dashboard & monitoring | ✅ semua | ✅ semua | ✅ kolam tugas |
+| Buat/ubah jadwal global/baris | ✅ | ✅ | ❌ |
+| Buat/ubah jadwal kolam sendiri | ✅ | ✅ | ✅ |
+| Override porsi | ✅ | ✅ | ❌ |
+| Manual feed | ✅ | ✅ | ✅ kolam tugas |
+| E-stop / home | ✅ | ✅ | ❌ |
+| Reset perangkat | ✅ | ✅ | ❌ |
+| Kelola pengguna & perangkat | ✅ | ✅ | ❌ |
+| Audit trail | ✅ | ✅ | ❌ |
+| Riwayat & ekspor | ✅ semua | ✅ semua | ✅ kolam tugas |
+
+## Struktur proyek
+
+```
+autofeeder/
+├── backend/
+│   ├── app/
+│   │   ├── main.py            # app, middleware, scheduler loop, static UI
+│   │   ├── config.py          # env + validasi secret
+│   │   ├── models.py          # tabel feeder_*
+│   │   ├── schemas.py         # validasi request
+│   │   ├── security.py        # bcrypt, JWT, rate limit
+│   │   ├── deps.py            # auth dependency & scope kolam
+│   │   ├── routers/           # auth, ponds, schedules, feeds, runs, alarms,
+│   │   │                      # audit, devices, device_api, dashboard, users
+│   │   └── services/          # feeder, schedules, devices, alarms, audit,
+│   │                          # serializers, export, timeutil
+│   ├── tests/test_api.py      # 20 tes API
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/
+│   └── src/
+│       ├── pages/             # dashboard, jadwal, manual, riwayat, alarm, ...
+│       ├── components/        # peta gantry, grafik SVG, komponen UI
+│       ├── api.js             # client API + penanganan 401
+│       └── styles.css         # UI sederhana, responsif
+├── simulator/device_sim.py    # simulator perangkat tanpa dependensi
+├── docs/
+│   ├── DEVICE_API.md          # kontrak firmware ESP32
+│   ├── INTEGRATION.md         # integrasi Fish Linker, MySQL, JWT
+│   └── SECURITY.md            # model ancaman & checklist produksi
+├── PLAN.md                    # rencana implementasi bertahap
+└── start.sh
+```
+
+## API singkat
+
+| Area | Endpoint |
+|---|---|
+| Auth | `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/password` |
+| Dashboard | `GET /api/dashboard` |
+| Kolam | `GET /api/ponds`, `PATCH /api/ponds/{id}/biomass` |
+| Jadwal | `GET/POST /api/schedules`, `PUT /api/schedules/{id}`, `GET /api/schedules/effective` |
+| Manual feed | `POST /api/commands/manual-feed` |
+| Riwayat | `GET /api/runs`, `GET /api/runs/export.csv` |
+| Alarm | `GET /api/alarms`, `POST /api/alarms/{id}/acknowledge` |
+| Perangkat | `GET /api/devices`, `POST /api/devices/{id}/rotate-key` |
+| Device API | `POST /api/device/telemetry`, `GET /api/device/commands`, `POST /api/device/commands/{uid}/ack` |
+| Audit | `GET /api/audit` |
+
+Saat `ENVIRONMENT` bukan production, dokumentasi interaktif tersedia di
+**http://127.0.0.1:8010/docs**.
+
+## Pengujian
+
+```bash
+cd backend
+.venv/bin/python -m pytest -q
+```
+
+Cakupan: login/RBAC, token tanpa versi, scope kolam, jadwal, prioritas jadwal
+efektif, autentikasi perangkat, telemetry, manual feed, pemotongan stok, replay
+ACK, idempotency, dispatch scheduler, stok kurang, command expiry, E-stop/reset,
+alarm, rotasi key, CSV, audit, pembatalan command.
+
+Uji end-to-end dengan simulator:
+
+```bash
+# terminal 1
+./start.sh
+# terminal 2
+python3 simulator/device_sim.py --once   # cek kredensial
+python3 simulator/device_sim.py          # polling penuh
+```
+
+Di UI, lakukan **Manual Feed** 500 g; simulator akan meng-ACK dan status run
+berubah menjadi `dispensed` dengan berat aktual.
+
+## Reset data demo
+
+Hentikan backend, lalu:
+
+```bash
+rm backend/data/autofeeder.db
+```
+
+Jalankan ulang; database dan seed demo dibuat kembali. Untuk MySQL, gunakan
+migrasi/seed terkontrol—jangan menjalankan `DROP` di production.
+
+## Batasan saat ini
+
+- Satu gantry aktif; model sudah menyimpan `device_id` untuk multi-gantry.
+- REST polling, bukan MQTT. Alasannya dan jalur migrasinya ada di
+  [`docs/INTEGRATION.md`](docs/INTEGRATION.md) bagian 8.
+- Belum ada Alembic; perubahan skema saat ini memakai `create_all` (cocok untuk
+  instalasi baru, bukan migrasi produksi).
+- Ekspor PDF masih berupa halaman cetak browser, belum PDF server-side.
+- Rate limit masih in-memory.
+- Firmware ESP32 dan kalibrasi mekanik belum termasuk repo ini.
+
+## Dokumentasi
+
+- [`PLAN.md`](PLAN.md) — rencana bertahap dan status.
+- [`docs/DEVICE_API.md`](docs/DEVICE_API.md) — kontrak firmware/perangkat.
+- [`docs/INTEGRATION.md`](docs/INTEGRATION.md) — Fish Linker, MySQL, JWT, SQL impor.
+- [`docs/SECURITY.md`](docs/SECURITY.md) — model ancaman, kontrol, checklist go-live.
+
+## Lisensi
+
+Internal. Sesuaikan dengan kebijakan organisasi sebelum distribusi.
