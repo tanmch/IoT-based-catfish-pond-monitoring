@@ -12,7 +12,7 @@ from ..deps import ADMIN_ROLES, client_ip, get_current_user, user_pond_ids
 from ..services import feeder as feeder_service
 from ..services.export import csv_response, pdf_table_response
 from ..services.serializers import command_dict, run_dict
-from ..services.timeutil import iso_wib, wib_day_bounds_utc
+from ..services.timeutil import iso_wib, utcnow, wib_day_bounds_utc
 
 router = APIRouter(tags=["feeding"])
 
@@ -182,7 +182,6 @@ def export_runs_pdf(
         date_to=date_to,
     ).limit(5000)
     runs = query.all()
-    commands = _commands_for_runs(db, [r.id for r in runs])
     headers = [
         "Waktu WIB",
         "Kolam",
@@ -216,7 +215,7 @@ def export_runs_pdf(
     period = f"{date_from.isoformat() if date_from else 'awal'} s/d {date_to.isoformat() if date_to else 'sekarang'}"
     subtitle = (
         f"Periode {period} · {len(runs)} run · target {total_target / 1000:.2f} kg "
-        f"· aktual {total_actual / 1000:.2f} kg · dibuat {iso_wib(__import__('datetime').datetime.utcnow())} WIB"
+        f"· aktual {total_actual / 1000:.2f} kg · dibuat {iso_wib(utcnow())} WIB"
     )
     filename = f"riwayat-feeding-{date.today().isoformat()}.pdf"
     return pdf_table_response(

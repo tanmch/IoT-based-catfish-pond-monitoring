@@ -19,23 +19,26 @@ export default function HistoryPage() {
   const query = useMemo(() => ({ ...filters, limit: LIMIT, offset }), [filters, offset])
   const runs = usePolling(() => api.runs(query), 0, [query])
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState('')
 
   function setFilter(key, value) {
     setFilters((current) => ({ ...current, [key]: value }))
     setOffset(0)
   }
 
-  async function exportCsv() {
-    setBusy(true)
+  async function exportFile(kind) {
+    setBusy(kind)
     setError('')
     try {
       const qs = buildQuery(filters)
-      await api.download(`/runs/export.csv${qs ? `?${qs}` : ''}`, `riwayat-feeding-${todayInput()}.csv`)
+      await api.download(
+        `/runs/export.${kind}${qs ? `?${qs}` : ''}`,
+        `riwayat-feeding-${todayInput()}.${kind}`,
+      )
     } catch (err) {
       setError(err.message)
     } finally {
-      setBusy(false)
+      setBusy('')
     }
   }
 
@@ -43,12 +46,14 @@ export default function HistoryPage() {
     <div className="page-stack">
       <PageHeader
         title="Riwayat Feeding"
-        subtitle="Filter, ekspor CSV, atau cetak PDF melalui dialog print browser."
+        subtitle="Filter, ekspor CSV, atau unduh laporan PDF resmi (server-side)."
         actions={
           <>
-            <button type="button" className="btn sm" onClick={() => window.print()}>Cetak / PDF</button>
-            <button type="button" className="btn sm" disabled={busy} onClick={exportCsv}>
-              {busy ? 'Menyiapkan…' : 'Ekspor CSV'}
+            <button type="button" className="btn sm" disabled={!!busy} onClick={() => exportFile('pdf')}>
+              {busy === 'pdf' ? 'Menyiapkan…' : 'Ekspor PDF'}
+            </button>
+            <button type="button" className="btn sm" disabled={!!busy} onClick={() => exportFile('csv')}>
+              {busy === 'csv' ? 'Menyiapkan…' : 'Ekspor CSV'}
             </button>
           </>
         }

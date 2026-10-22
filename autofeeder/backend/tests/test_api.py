@@ -455,6 +455,24 @@ def test_csv_exports_and_public_mode_disabled(client: TestClient):
     assert client.get("/api/public/summary").status_code == 404
 
 
+def test_pdf_export_returns_pdf_and_respects_roles(client: TestClient):
+    send_telemetry(client)
+    admin = login(client, "admin")
+    pdf = client.get("/api/runs/export.pdf", headers=admin)
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert "attachment" in pdf.headers["content-disposition"]
+    assert pdf.content.startswith(b"%PDF")
+    assert len(pdf.content) > 1000
+
+    operator = login(client, "operator")
+    scoped = client.get("/api/runs/export.pdf", headers=operator)
+    assert scoped.status_code == 200
+    assert scoped.content.startswith(b"%PDF")
+
+    assert client.get("/api/runs/export.pdf").status_code == 401
+
+
 def test_audit_trail_is_admin_only(client: TestClient):
     login(client, "admin")
     admin = login(client, "admin")

@@ -172,7 +172,7 @@ berisiko.
       perubahan pengguna, dan aksi alarm.
 - [x] Audit mencatat aktor, peran, IP, waktu WIB, dan metadata.
 - [x] Cetak laporan (print-friendly) dari halaman riwayat.
-- [ ] Ekspor PDF server-side dengan kop laporan.
+- [x] Ekspor PDF server-side dengan kop laporan (ReportLab).
 - [ ] Penandatanganan/immutability audit untuk kebutuhan kepatuhan tinggi.
 
 **Kriteria selesai**

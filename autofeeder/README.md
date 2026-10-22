@@ -273,7 +273,8 @@ migrasi/seed terkontrol—jangan menjalankan `DROP` di production.
   [`docs/INTEGRATION.md`](docs/INTEGRATION.md) bagian 8.
 - Belum ada Alembic; perubahan skema saat ini memakai `create_all` (cocok untuk
   instalasi baru, bukan migrasi produksi).
-- Ekspor PDF masih berupa halaman cetak browser, belum PDF server-side.
+- Ekspor PDF riwayat feeding dibuat di server (ReportLab), bukan dialog print
+  browser; halaman tetap print-friendly sebagai cadangan.
 - Rate limit masih in-memory.
 - Firmware ESP32 dan kalibrasi mekanik belum termasuk repo ini.
 
