@@ -64,6 +64,11 @@ async def _scheduler_loop(stop: asyncio.Event) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    if settings.demo_mode:
+        logger.warning(
+            "DEMO_MODE aktif: aplikasi tanpa login dan hanya untuk presentasi. "
+            "Jangan diekspos ke internet."
+        )
     if settings.seed_demo:
         if settings.is_production:
             raise RuntimeError("SEED_DEMO tidak boleh aktif di production.")
@@ -161,7 +166,6 @@ def create_app() -> FastAPI:
     from .routers import (
         alarms,
         audit,
-        auth,
         dashboard,
         device_api,
         devices as devices_router,
@@ -169,12 +173,9 @@ def create_app() -> FastAPI:
         ponds,
         runs,
         schedules,
-        users,
     )
 
     api = settings.api_prefix
-    app.include_router(auth.router, prefix=api)
-    app.include_router(users.router, prefix=api)
     app.include_router(ponds.router, prefix=api)
     app.include_router(schedules.router, prefix=api)
     app.include_router(feeds.router, prefix=api)

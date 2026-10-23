@@ -16,6 +16,28 @@ from ..services.timeutil import iso_wib, utcnow, wib_day_bounds_utc
 
 router = APIRouter(tags=["feeding"])
 
+REASON_LABELS = {
+    "PERAWATAN_KOLAM": "Perawatan kolam",
+    "JADWAL_DILEWATI": "Jadwal dilewati",
+    "KOLAM_DIKOSONGKAN": "Kolam dikosongkan",
+    "MOTOR_TIMEOUT": "Motor timeout",
+    "PAKAN_TIDAK_TERDETEKSI": "Pakan tidak terdeteksi",
+    "GANTRY_FAULT": "Gangguan gantry",
+    "STOK_PAKAN_TIDAK_CUKUP": "Stok pakan tidak cukup",
+    "PAKAN_HOPPER_TIDAK_CUKUP": "Pakan hopper tidak cukup",
+    "PERINTAH_KEDALUWARSA": "Perintah kedaluwarsa",
+    "JADWAL_DIUBAH": "Jadwal diubah",
+    "JADWAL_NONAKTIF": "Jadwal nonaktif",
+}
+STATUS_LABELS = {
+    "planned": "Direncanakan",
+    "dispensed": "Selesai",
+    "skipped": "Dilewati",
+    "failed": "Gagal",
+}
+SOURCE_LABELS = {"schedule": "Jadwal", "manual": "Manual"}
+SIDE_LABELS = {"left": "Kiri", "right": "Kanan"}
+
 
 def require_admin(user: models.User = Depends(get_current_user)) -> models.User:
     if user.role not in ADMIN_ROLES:
@@ -203,13 +225,13 @@ def export_runs_pdf(
             [
                 iso_wib(run.planned_at),
                 run.pond.name if run.pond else run.pond_id,
-                run.side,
-                run.source,
+                SIDE_LABELS.get(run.side, run.side),
+                SOURCE_LABELS.get(run.source, run.source),
                 f"{run.target_grams:.0f}",
                 f"{run.actual_grams:.0f}" if run.actual_grams is not None else "—",
                 f"{run.rotary_rotations:.2f}",
-                run.status,
-                run.failure_reason or "—",
+                STATUS_LABELS.get(run.status, run.status),
+                REASON_LABELS.get(run.failure_reason, run.failure_reason) or "—",
             ]
         )
     period = f"{date_from.isoformat() if date_from else 'awal'} s/d {date_to.isoformat() if date_to else 'sekarang'}"

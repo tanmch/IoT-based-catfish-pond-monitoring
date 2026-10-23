@@ -2,7 +2,10 @@
 
 AutoFeeder sengaja dibuat sebagai **layanan terpisah** agar aplikasi Fish Linker
 yang sudah berjalan tidak perlu diubah atau di-deploy ulang. Integrasi dilakukan
-melalui database MySQL bersama, JWT, dan kontrak data yang stabil.
+melalui database MySQL bersama dan kontrak data yang stabil.
+
+> Build presentasi tidak memiliki login/akun. Integrasi identitas (SSO) hanya
+> relevan setelah autentikasi diimplementasikan kembali untuk produksi.
 
 ## 1. Prinsip integrasi
 
@@ -20,14 +23,15 @@ melalui database MySQL bersama, JWT, dan kontrak data yang stabil.
 
 | Kebutuhan AutoFeeder | Sumber Fish Linker | Tabel AutoFeeder | Catatan |
 |---|---|---|---|
-| Pengguna & peran | `users` | `feeder_users` | Admin/pemilik/petani; password bcrypt terpisah |
 | Kolam 20 unit | `kolam` | `feeder_ponds` | `fishlinker_kolam_id` menyimpan id asli |
-| Penugasan petani | `pemilik_petani_kolam` | `feeder_pond_assignments` | Menentukan scope akses petani |
 | Biomassa | `isi_kolam` / `fish_stock` / `growth_log` | `feeder_ponds.biomass_kg` | Dipakai untuk porsi persen biomassa |
 | Stok pakan | `feed_stock` | `feeder_feed_stock` | AutoFeeder memotong stoknya sendiri |
 | Riwayat feeding | `pemberian_pakan` | `feeder_runs`, `feeder_commands` | AutoFeeder mencatat target vs aktual |
 | Sensor | `sensor_data` | `feeder_telemetry` | Data hopper, daya, lingkungan gantry |
 | Audit | `aktivitas` | `feeder_audit_logs` | Aksi AutoFeeder tetap tercatat sendiri |
+
+Identitas pelaku audit disimpan sebagai snapshot (`username`, `role`) di
+`feeder_audit_logs`; tidak ada tabel akun yang perlu disinkronkan pada build ini.
 
 ## 3. Opsi A — satu database MySQL (disarankan)
 
@@ -46,8 +50,7 @@ Langkah:
    ```
 
 2. Jalankan AutoFeeder sekali agar tabel `feeder_*` dibuat otomatis.
-3. Salin data awal (lihat bagian 5) atau gunakan halaman **Pengguna** dan
-   **Perangkat** untuk mengisi manual.
+3. Salin data awal (lihat bagian 5) atau isi melalui halaman **Perangkat**.
 4. Untuk produksi, pasang Alembic sebelum perubahan skema berikutnya. Saat ini
    pembuatan tabel memakai `Base.metadata.create_all`, yang aman untuk instalasi
    baru tetapi belum menangani migrasi kolom.
@@ -69,8 +72,6 @@ FISHLINKER_DATABASE_URL=mysql+pymysql://feeder_readonly:...@127.0.0.1:3306/budid
 Skrip sinkronisasi dapat dijalankan sebagai cron setiap 15 menit:
 
 - `kolam` → `feeder_ponds` (berdasarkan `fishlinker_kolam_id`)
-- `users` → `feeder_users` (hanya jika ingin login tunggal; hash password harus
-  kompatibel bcrypt)
 - stok pakan → `feeder_feed_stock`
 
 ## 5. SQL impor contoh
@@ -79,7 +80,7 @@ Jalankan dengan user yang punya akses baca ke Fish Linker dan tulis ke
 `feeder_*`. Sesuaikan nama kolom dengan skema aktual sebelum eksekusi.
 
 ```sql
--- 1) Kolam: 10 kiri + 10 kanan, indeks 1..20
+-- Kolam: 10 kiri + 10 kanan, indeks 1..20
 INSERT INTO feeder_ponds
   (fishlinker_kolam_id, name, side, pond_index, position_m, biomass_kg, diameter_m, is_active, created_at)
 SELECT
@@ -102,75 +103,12 @@ ON DUPLICATE KEY UPDATE
   name = VALUES(name),
   biomass_kg = VALUES(biomass_kg),
   is_active = VALUES(is_active);
-
--- 2) Penugasan petani (contoh: semua kolam untuk user role petani)
-INSERT IGNORE INTO feeder_pond_assignments (user_id, pond_id, created_at)
-SELECT u.id, p.id, UTC_TIMESTAMP()
-FROM feeder_users u
-CROSS JOIN feeder_ponds p
-WHERE u.role = 'petani';
 ```
 
 > `ROW_NUMBER()` membutuhkan MySQL 8+. Untuk MySQL 5.7 gunakan variabel
 > `@row := @row + 1` atau lakukan pemetaan di skrip Python.
 
-## 6. Autentikasi bersama (SSO)
-
-AutoFeeder memakai JWT HS256 dengan klaim:
-
-```json
-{
-  "sub": "user@example.com",
-  "uid": 12,
-  "role": "pemilik",
-  "ver": 1,
-  "iat": 1760000000,
-  "nbf": 1760000000,
-  "exp": 1760003600,
-  "jti": "..."
-}
-```
-
-Ada tiga pilihan, dari yang paling sederhana:
-
-### 6.1 Secret sama, klaim kompatibel
-
-Jika Fish Linker dan AutoFeeder memakai `SECRET_KEY` yang sama dan Fish Linker
-sudah mengirim `sub`, `uid`, `role`, serta `ver`:
-
-1. Salin `SECRET_KEY` Fish Linker ke `backend/.env` AutoFeeder **melalui secret
-   manager**, jangan lewat git.
-2. Pastikan nilai `role`Fish Linker dipetakan ke `admin`/`pemilik`/`petani`.
-3. Salin user ke `feeder_users` dengan `id` yang sama dan `token_version` yang
-   sama dengan `ver`. Token lama otomatis berlaku di kedua aplikasi.
-4. Ganti password di AutoFeeder akan menaikkan `token_version` sehingga token
-   lama ditolak. Ini juga mencabut sesi Fish Linker bila memakai secret yang sama;
-   koordinasikan kebijakan logout.
-
-**Risiko:** siapa pun yang memegang secret dapat membuat token untuk kedua
-aplikasi. Simpan secret hanya di environment/secret manager, rotasi berkala, dan
-jangan pernah mengirimnya ke browser.
-
-### 6.2 Reverse proxy dengan validasi terpusat
-
-Letakkan kedua aplikasi di belakang Nginx/Traefik:
-
-- `/` → Fish Linker :8000
-- `/feeder/` → AutoFeeder :8010
-- Validasi JWT dilakukan di gateway; AutoFeeder menerima header identitas dari
-  gateway melalui jaringan internal.
-
-Cara ini membutuhkan adaptasi dependency `get_current_user` agar memercayai
-header gateway **hanya** dari IP internal. Jangan aktifkan mode ini jika backend
-dapat diakses langsung dari internet.
-
-### 6.3 Token exchange (paling aman untuk jangka panjang)
-
-Fish Linker menambahkan endpoint `POST /auth/feeder-token` yang menerbitkan token
-AutoFeeder berumur pendek setelah memvalidasi sesi Fish Linker. AutoFeeder tetap
-memakai `SECRET_KEY` sendiri. Ini menghindari sharing secret dan memudahkan audit.
-
-## 7. Integrasi feeding & stok
+## 6. Integrasi feeding & stok
 
 AutoFeeder adalah **sumber kebenaran** untuk eksekusi gantry dan stok hopper.
 Fish Linker tetap menjadi sumber kebenaran untuk pembelian pakan dan keuangan.
@@ -188,7 +126,7 @@ Rekomendasi:
 - Untuk laporan keuangan, ekspor CSV AutoFeeder dapat diimpor ke modul Fish
   Linker atau digabungkan di lapisan BI.
 
-## 8. MQTT vs REST
+## 7. MQTT vs REST
 
 PRD awal memilih MQTT/TLS (HiveMQ). Implementasi ini memilih **REST polling**
 karena:
@@ -207,10 +145,12 @@ nanti ada banyak gantry, tambahkan adapter MQTT di belakang service yang sama:
 MQTT handler memanggil fungsi `poll_commands`/`ack_command` yang sudah ada,
 sehingga logika bisnis tidak berubah.
 
-## 9. Checklist go-live integrasi
+## 8. Checklist go-live integrasi
 
-- [ ] `SECRET_KEY` dan `DEVICE_API_KEY` dibuat acak, tidak ada di git.
-- [ ] `ENVIRONMENT=production`, `SEED_DEMO=false`, `DEBUG=false`.
+- [ ] Autentikasi dan RBAC diimplementasikan kembali sebelum aplikasi diekspos.
+- [ ] `DEVICE_API_KEY` dibuat acak, tidak ada di git.
+- [ ] `ENVIRONMENT=production`, `DEMO_MODE=false`, `SEED_DEMO=false`,
+      `SEED_DEMO_HISTORY=false`, `DEBUG=false`.
 - [ ] HTTPS aktif; `ALLOWED_HOSTS` dan `CORS_ORIGINS` berisi domain nyata.
 - [ ] User MySQL AutoFeeder hanya punya akses `feeder_*`.
 - [ ] Backup harian schema `budidaya_lele` dan uji restore.

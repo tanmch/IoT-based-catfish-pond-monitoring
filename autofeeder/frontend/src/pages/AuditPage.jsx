@@ -7,10 +7,6 @@ import { buildQuery, daysAgoInput, fmtDateTime, label, todayInput } from '../uti
 const LIMIT = 100
 
 const ACTIONS = [
-  'auth.login',
-  'auth.login_failed',
-  'auth.register',
-  'auth.password_change',
   'feeding.dispatch',
   'feeding.manual',
   'feeding.dispensed',
@@ -22,14 +18,12 @@ const ACTIONS = [
   'device.reset',
   'device.home',
   'device.rotate_key',
+  'device.config_update',
   'schedule.create',
   'schedule.update',
   'schedule.pause',
   'schedule.resume',
   'schedule.delete',
-  'user.create',
-  'user.update',
-  'user.pond_assign',
   'alarm.acknowledge',
   'alarm.resolve',
   'feed.create',

@@ -12,10 +12,11 @@ os.environ.update(
     {
         "ENVIRONMENT": "test",
         "DEBUG": "false",
-        "SECRET_KEY": "test-secret-0123456789abcdef0123456789abcdef",
+        "DEMO_MODE": "false",
         "DEVICE_API_KEY": TEST_DEVICE_KEY,
         "DATABASE_URL": f"sqlite:///{TEST_DB}",
         "SEED_DEMO": "true",
+        "SEED_DEMO_HISTORY": "false",
         "SCHEDULER_ENABLED": "false",
         "ALLOWED_HOSTS": "testserver,localhost",
         "CORS_ORIGINS": "http://localhost:5174",
@@ -29,12 +30,6 @@ from fastapi.testclient import TestClient
 from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.seed import seed_demo
-
-DEMO = {
-    "admin": "Admin#12345",
-    "pemilik": "Pemilik#12345",
-    "operator": "Petani#12345",
-}
 
 
 @pytest.fixture()
@@ -53,13 +48,8 @@ def client(db):
 
 
 def login(client: TestClient, username: str = "admin", password: str | None = None) -> dict:
-    response = client.post(
-        "/api/auth/login",
-        json={"identifier": username, "password": password or DEMO[username]},
-    )
-    assert response.status_code == 200, response.text
-    data = response.json()
-    return {"Authorization": f"Bearer {data['access_token']}"}
+    """Presentation mode has no login; kept as a no-op for older tests."""
+    return {}
 
 
 def device_headers(key: str = TEST_DEVICE_KEY) -> dict:

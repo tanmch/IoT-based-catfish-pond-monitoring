@@ -1,62 +1,42 @@
-"""FastAPI dependencies: authentication, roles and pond-level authorisation."""
+"""FastAPI dependencies.
+
+This build runs in presentation/demo mode: there is no login or account system.
+Every request acts as a single seeded demo operator with full access. Device
+endpoints still require the device API key so the hardware contract stays
+authenticated.
+"""
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import func
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from . import models
+from .config import settings
 from .database import get_db
-from .security import decode_token, hash_device_key
+from .security import hash_device_key
 
 ADMIN_ROLES = {"admin", "pemilik"}
 ALL_ROLES = {"admin", "pemilik", "petani"}
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
+def get_current_user(db: Annotated[Session, Depends(get_db)]) -> models.User:
+    """Return the fixed demo operator (created on demand if the DB is empty)."""
+    from .seed import ensure_demo_user
 
-def _unauthorized(detail: str = "Autentikasi diperlukan.") -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=detail,
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-
-def get_current_user(
-    token: Annotated[str | None, Depends(oauth2_scheme)],
-    db: Annotated[Session, Depends(get_db)],
-) -> models.User:
-    if not token:
-        raise _unauthorized()
-    try:
-        payload = decode_token(token)
-        email = str(payload.get("sub", "")).strip().lower()
-        if not email:
-            raise ValueError("missing sub")
-        token_version = int(payload["ver"])
-    except Exception:
-        raise _unauthorized("Token tidak valid atau kedaluwarsa.")
-
-    user = db.query(models.User).filter(func.lower(models.User.email) == email).first()
+    user = db.query(models.User).filter(models.User.username == "Operator Demo").first()
     if not user:
-        raise _unauthorized("Token tidak valid atau kedaluwarsa.")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Akun dinonaktifkan.")
-    if token_version != user.token_version:
-        raise _unauthorized("Sesi sudah tidak berlaku. Silakan login kembali.")
+        user = ensure_demo_user(db)
+        db.commit()
+        db.refresh(user)
     return user
 
 
 def require_roles(*roles: str):
-    allowed = set(roles)
+    """Kept for call-site compatibility; demo mode has no role restrictions."""
 
     def dependency(user: Annotated[models.User, Depends(get_current_user)]) -> models.User:
-        if user.role not in allowed:
-            raise HTTPException(status_code=403, detail="Anda tidak memiliki izin untuk aksi ini.")
         return user
 
     return dependency
@@ -84,39 +64,26 @@ def client_ip(request: Request) -> str | None:
 
 
 def user_pond_ids(db: Session, user: models.User) -> list[int] | None:
-    """None means all ponds (admin/owner)."""
-    if user.role in ADMIN_ROLES:
-        return None
-    rows = db.query(models.PondAssignment.pond_id).filter(models.PondAssignment.user_id == user.id).all()
-    return [r[0] for r in rows]
+    """Demo mode sees every pond."""
+    return None
 
 
 def can_access_pond(db: Session, user: models.User, pond_id: int) -> bool:
-    if user.role in ADMIN_ROLES:
-        return True
-    return (
-        db.query(models.PondAssignment.id)
-        .filter(
-            models.PondAssignment.user_id == user.id,
-            models.PondAssignment.pond_id == pond_id,
-        )
-        .first()
-        is not None
-    )
+    return True
 
 
 def ensure_pond_access(db: Session, user: models.User, pond_id: int) -> models.Pond:
     pond = db.get(models.Pond, pond_id)
     if not pond:
         raise HTTPException(status_code=404, detail="Kolam tidak ditemukan.")
-    if not can_access_pond(db, user, pond_id):
-        raise HTTPException(status_code=403, detail="Anda tidak memiliki akses ke kolam ini.")
     return pond
 
 
 def ensure_device_online(db: Session, device: models.Device, offline_seconds: int) -> None:
     from .services.timeutil import iso_wib, utcnow
 
+    if settings.demo_mode:
+        return
     if not device.last_seen_at:
         raise HTTPException(status_code=409, detail="Perangkat belum pernah terhubung.")
     age = (utcnow() - device.last_seen_at).total_seconds()

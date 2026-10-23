@@ -15,6 +15,8 @@ from .timeutil import iso_wib, utcnow
 def device_online(device: models.Device | None, now=None) -> bool:
     if not device or not device.last_seen_at:
         return False
+    if settings.demo_mode:
+        return True
     now = now or utcnow()
     return (now - device.last_seen_at).total_seconds() <= settings.device_offline_seconds
 

@@ -1,6 +1,4 @@
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
-const TOKEN_KEY = 'autofeeder_token'
-const USER_KEY = 'autofeeder_user'
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -11,46 +9,17 @@ export class ApiError extends Error {
   }
 }
 
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-export function getStoredUser() {
-  try {
-    return JSON.parse(localStorage.getItem(USER_KEY) || 'null')
-  } catch {
-    return null
-  }
-}
-
-export function storeSession(token, user) {
-  localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, JSON.stringify(user))
-}
-
-export function clearSession() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
-}
-
 async function request(path, options = {}) {
   const { method = 'GET', body, headers = {}, signal, raw = false } = options
-  const token = getToken()
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal,
   })
-
-  if (response.status === 401) {
-    clearSession()
-    window.dispatchEvent(new Event('autofeeder:unauthorized'))
-  }
 
   if (!response.ok) {
     let detail = `Permintaan gagal (HTTP ${response.status}).`
@@ -82,12 +51,6 @@ function queryString(params = {}) {
 }
 
 export const api = {
-  login: (identifier, password) =>
-    request('/auth/login', { method: 'POST', body: { identifier, password } }),
-  register: (payload) => request('/auth/register', { method: 'POST', body: payload }),
-  me: () => request('/auth/me'),
-  changePassword: (payload) => request('/auth/password', { method: 'POST', body: payload }),
-
   dashboard: () => request('/dashboard'),
   ponds: () => request('/ponds'),
   pond: (id) => request(`/ponds/${id}`),
@@ -127,13 +90,6 @@ export const api = {
   telemetry: (params) => request(`/devices/telemetry${queryString(params)}`),
   rotateDeviceKey: (deviceId) =>
     request(`/devices/${encodeURIComponent(deviceId)}/rotate-key`, { method: 'POST' }),
-
-  users: () => request('/users'),
-  availablePonds: () => request('/users/ponds/available'),
-  createUser: (payload) => request('/users', { method: 'POST', body: payload }),
-  updateUser: (id, payload) => request(`/users/${id}`, { method: 'PATCH', body: payload }),
-  setUserPonds: (id, pondIds) =>
-    request(`/users/${id}/ponds`, { method: 'PUT', body: { pond_ids: pondIds } }),
 
   async download(path, filename) {
     const response = await request(path, { raw: true })

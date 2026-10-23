@@ -9,68 +9,13 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
-USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,50}$")
 IDEMPOTENCY_RE = re.compile(r"^[A-Za-z0-9_.:-]{8,80}$")
 
-Role = Literal["admin", "pemilik", "petani"]
 Scope = Literal["global", "row", "pond"]
 Side = Literal["left", "right"]
-
-
-class LoginRequest(BaseModel):
-    identifier: str = Field(min_length=1, max_length=150)
-    password: str = Field(min_length=1, max_length=256)
-
-
-class RegisterRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
-    email: EmailStr
-    password: str = Field(min_length=10, max_length=256)
-
-    @field_validator("username")
-    @classmethod
-    def _username(cls, value: str) -> str:
-        value = value.strip()
-        if not USERNAME_RE.match(value):
-            raise ValueError("Username hanya boleh huruf, angka, titik, garis bawah, atau strip (3-50).")
-        return value
-
-
-class PasswordChangeRequest(BaseModel):
-    current_password: str = Field(min_length=1, max_length=256)
-    new_password: str = Field(min_length=10, max_length=256)
-
-
-class UserCreateRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
-    email: EmailStr
-    password: str = Field(min_length=10, max_length=256)
-    role: Role = "petani"
-
-    @field_validator("username")
-    @classmethod
-    def _username(cls, value: str) -> str:
-        value = value.strip()
-        if not USERNAME_RE.match(value):
-            raise ValueError("Username hanya boleh huruf, angka, titik, garis bawah, atau strip (3-50).")
-        return value
-
-
-class UserUpdateRequest(BaseModel):
-    role: Role | None = None
-    is_active: bool | None = None
-
-
-class PondAssignmentRequest(BaseModel):
-    pond_ids: list[int] = Field(default_factory=list, max_length=100)
-
-    @field_validator("pond_ids")
-    @classmethod
-    def _unique(cls, value: list[int]) -> list[int]:
-        return sorted(set(value))
 
 
 class PondBiomassRequest(BaseModel):

@@ -1,93 +1,65 @@
-# Keamanan — AutoFeeder Rail Gantry
+# Keamanan — AutoFeeder Rail Gantry (mode presentasi)
 
-Dokumen ini merangkum model ancaman, kontrol yang sudah diterapkan, dan syarat
-sebelum produksi. Aplikasi mengendalikan mesin fisik, jadi keamanan siber dan
-keselamatan mekanik harus ditangani bersama.
+Dokumen ini merangkum kontrol yang masih berlaku pada build presentasi dan
+syarat mutlak sebelum aplikasi dipakai untuk produksi. Aplikasi mengendalikan
+mesin fisik, jadi keamanan siber dan keselamatan mekanik harus ditangani bersama.
+
+> **Peringatan:** build ini **tidak memiliki login, akun, atau RBAC**. Siapa pun
+> yang dapat menjangkau port aplikasi dapat mengirim manual feed, E-stop, reset,
+> dan mengubah jadwal. Jalankan hanya di localhost atau jaringan internal yang
+> tepercaya. Jangan pernah mengeksposnya ke internet.
 
 ## 1. Aset yang dilindungi
 
-- Akun pengguna dan sesi (JWT).
 - Kredensial perangkat (`X-Device-Key`).
 - Perintah pengendalian gantry (feed, move, home, E-stop, reset).
 - Data operasional: jadwal, biomassa, stok pakan, riwayat, telemetry.
-- Audit trail dan data pribadi pengguna (username, email, IP).
+- Audit trail aksi operasional.
 
 ## 2. Aktor ancaman
 
-| Aktor | Kemampuan | Dampak yang dicegah |
+| Aktor | Kemampuan | Dampak |
 |---|---|---|
-| Pengguna tanpa login | akses internet/internal | melihat data, mengirim perintah |
-| Petani dengan akun terbatas | login sah | mengubah kolam lain, jadwal global, pengguna, audit |
+| Siapa pun di jaringan | membuka UI tanpa login | dapat mengendalikan gantry |
 | Perangkat palsu | akses jaringan | mengirim telemetry/ACK palsu |
-| Penyerang jaringan | sniffing/MITM | mencuri token/key, memalsukan perintah |
-| Insider | akun sah | aksi tanpa jejak, penyalahgunaan stok |
-| Beban berlebih | request berulang | brute force, pengiriman perintah ganda |
+| Penyerang jaringan | sniffing/MITM | mencuri device key, memalsukan perintah |
+| Insider | akses UI | aksi tanpa jejak jika audit dihapus |
+| Beban berlebih | request berulang | pengiriman perintah ganda |
 
-## 3. Kontrol yang diterapkan
+## 3. Kontrol yang masih diterapkan
 
-### 3.1 Autentikasi pengguna
-
-- Password disimpan sebagai **bcrypt cost 12**. Password > 72 byte di-pre-hash
-  SHA-256 agar tidak terpotong diam-diam.
-- JWT **HS256**, masa berlaku **60 menit**, berisi `sub` (email), `uid`, `role`,
-  `ver` (token version), `iat`, `nbf`, `exp`, `jti`.
-- Setiap request memuat ulang user dari database; role dari token tidak
-  dipercaya. User nonaktif langsung ditolak.
-- `token_version` dinaikkan saat password berubah atau akun dinonaktifkan,
-  sehingga token lama tidak berlaku.
-- Pesan login gagal bersifat generik; hash dummy dipakai saat user tidak ada
-  untuk mengurangi perbedaan waktu respons.
-- Rate limit login: 5 percobaan / 10 menit per IP+identifier, lockout 15 menit.
-- Registrasi publik dapat dimatikan (`ALLOW_REGISTRATION=false`); akun baru
-  selalu role `petani` dan tidak otomatis mendapat kolam.
-
-### 3.2 Otorisasi
-
-- Role: `admin`, `pemilik`, `petani` (operator).
-- `admin`/`pemilik` dapat mengelola seluruh sistem.
-- `petani` dibatasi pada `feeder_pond_assignments`:
-  - semua endpoint kolam, jadwal, riwayat, alarm, dan manual feed memeriksa
-    scope kolam;
-  - tidak dapat membuat jadwal global/baris;
-  - tidak dapat mengubah pengguna, perangkat, audit, atau reset/home;
-  - hanya dapat membatalkan perintah feed miliknya sendiri.
-- Perintah E-stop/home/reset tidak dapat dibatalkan dari antrean.
-- Pemeriksaan dilakukan di backend, bukan hanya menyembunyikan tombol di UI.
-
-### 3.3 Autentikasi perangkat
+### 3.1 Autentikasi perangkat
 
 - Setiap perangkat memiliki key acak `fg_...` yang disimpan sebagai **SHA-256
   hash**; plaintext hanya ditampilkan sekali saat rotasi.
 - Key lama langsung tidak berlaku setelah rotasi.
-- Endpoint perangkat terpisah dari endpoint pengguna dan tidak menerima JWT.
+- Endpoint perangkat terpisah dari endpoint UI dan hanya menerima `X-Device-Key`.
 - ACK hanya diterima dari perangkat pemilik `command_uid`.
-- Command memiliki TTL dan idempotency key; ACK duplikat ditolak.
-- Disarankan HTTPS di produksi dan penyimpanan key di NVS terenkripsi.
+- Command memiliki TTL, idempotency key, dan ACK duplikat ditolak.
+- Gunakan HTTPS dan simpan key di NVS terenkripsi pada perangkat nyata.
 
-### 3.4 Validasi input & integritas
+### 3.2 Validasi input & integritas
 
 - Semua body divalidasi Pydantic: tipe, panjang, rentang, enum, format jam,
   duplikasi kolam/override.
 - Query memakai SQLAlchemy ORM (parameterized), tidak ada string SQL dari input.
 - Porsi dibatasi: jadwal maksimum 10.000 g, manual 5.000 g, persen biomassa
   maksimum 10%.
-- Manual feed wajib `confirm=true`; E-stop/reset juga.
+- Manual feed, E-stop, dan reset wajib `confirm=true`.
 - Idempotency key mencegah double-submit manual feed.
-- Transaksi database: dispatch, ACK, pemotongan stok, alarm, dan audit berada
-  dalam satu commit; kegagalan tidak meninggalkan stok terpotong sebagian.
+- Dispatch, ACK, pemotongan stok, alarm, dan audit berada dalam satu transaksi.
 - Perubahan jadwal membatalkan command pending agar alat tidak mengeksekusi
   konfigurasi lama.
 
-### 3.5 Audit trail
+### 3.3 Audit trail
 
-Dicatat: login berhasil/gagal, registrasi, ganti password, perubahan jadwal,
-manual feed, dispatch/ACK/expiry/cancel command, E-stop/reset/home, rotasi key,
-perubahan pengguna/penugasan, perubahan biomassa, alarm acknowledge/resolve.
+Dicatat: perubahan jadwal, manual feed, dispatch/ACK/expiry/cancel command,
+E-stop/reset/home, rotasi key, perubahan biomassa, dan alarm acknowledge/resolve.
 
-Setiap baris memuat waktu UTC (ditampilkan WIB), aktor, role, aksi, entitas,
+Setiap baris memuat waktu UTC (ditampilkan WIB), aktor demo, role, aksi, entitas,
 deskripsi, IP, dan metadata. Audit tidak dapat diubah dari UI.
 
-### 3.6 Header & konfigurasi web
+### 3.4 Header & konfigurasi web
 
 - `Content-Security-Policy`: default `self`, tanpa inline script, frame dilarang.
 - `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
@@ -99,12 +71,12 @@ deskripsi, IP, dan metadata. Audit tidak dapat diubah dari UI.
 - API mengirim `Cache-Control: no-store`; setiap respons punya `X-Request-ID`.
 - Error 500 tidak membocorkan stack trace ke klien.
 
-### 3.7 Secret & dependensi
+### 3.5 Secret & dependensi
 
-- Secret hanya dari environment; `.env` di-`.gitignore`.
-- Startup menolak `SECRET_KEY`/`DEVICE_API_KEY` lemah atau berpola default.
-- Production menolak `SEED_DEMO=true` dan `DEBUG=true`.
-- Tidak ada kredensial di source code atau dokumentasi.
+- `DEVICE_API_KEY` hanya dari environment; `.env` di-`.gitignore` dan `chmod 600`.
+- Startup menolak device key lemah atau berpola default.
+- Production menolak `DEMO_MODE=true`, `SEED_DEMO=true`,
+  `SEED_DEMO_HISTORY=true`, dan `DEBUG=true`.
 - Dependensi dipin dengan rentang mayor; jalankan `pip-audit` dan `npm audit`
   secara berkala.
 
@@ -112,10 +84,8 @@ deskripsi, IP, dan metadata. Audit tidak dapat diubah dari UI.
 
 | Risiko | Dampak | Mitigasi saat ini | Rekomendasi |
 |---|---|---|---|
-| Token di `localStorage` | XSS dapat mencuri token | React escaping + CSP tanpa inline script | Pertimbangkan cookie HttpOnly + CSRF token |
-| Rate limit in-memory | brute force terdistribusi | lockout per proses | Redis/API gateway di multi-worker |
+| Tanpa login/RBAC | siapa pun di jaringan dapat mengendalikan alat | batasi ke localhost/jaringan internal | implementasikan autentikasi + RBAC sebelum produksi |
 | REST polling tanpa mTLS | key bocor dapat disalahgunakan | key hash + rotasi + HTTPS | mTLS atau sertifikat perangkat |
-| Tidak ada 2FA | akun admin dicuri | password kuat + rate limit | 2FA untuk admin/pemilik |
 | Audit bisa dihapus oleh DBA | jejak hilang | akses DB terbatas | append-only storage/WORM |
 | E-stop berbasis software | latency jaringan | E-stop fisik wajib | uji rantai keselamatan hardware |
 | `create_all` tanpa Alembic | perubahan skema berisiko | instalasi baru | Alembic sebelum produksi |
@@ -123,15 +93,16 @@ deskripsi, IP, dan metadata. Audit tidak dapat diubah dari UI.
 
 ## 5. Checklist sebelum produksi
 
-- [ ] `ENVIRONMENT=production`, `DEBUG=false`, `SEED_DEMO=false`.
-- [ ] `SECRET_KEY` dan `DEVICE_API_KEY` dari secret manager, bukan file repo.
-- [ ] Ganti semua akun/password demo; nonaktifkan registrasi publik.
+- [ ] **Implementasikan ulang login, sesi, dan RBAC** (riwayat git menyimpan
+      implementasi JWT/bcrypt yang pernah ada).
+- [ ] `ENVIRONMENT=production`, `DEMO_MODE=false`, `DEBUG=false`,
+      `SEED_DEMO=false`, `SEED_DEMO_HISTORY=false`.
+- [ ] `DEVICE_API_KEY` dari secret manager, bukan file repo.
 - [ ] HTTPS aktif di reverse proxy; HTTP redirect ke HTTPS; HSTS.
 - [ ] `ALLOWED_HOSTS` dan `CORS_ORIGINS` hanya domain nyata.
 - [ ] Database user hanya punya akses ke schema/tabel yang diperlukan.
 - [ ] Backup terjadwal dan restore diuji.
-- [ ] Log dikirim ke penyimpanan terpusat; alert untuk 5xx dan login gagal masif.
-- [ ] Rate limit dipindahkan ke Redis bila memakai >1 worker.
+- [ ] Log dikirim ke penyimpanan terpusat; alert untuk 5xx.
 - [ ] Rotasi key perangkat diuji; key lama ditolak.
 - [ ] E-stop fisik diuji dan tidak bergantung pada server.
 - [ ] Audit trail diperiksa setelah simulasi perubahan jadwal dan manual feed.
@@ -140,11 +111,10 @@ deskripsi, IP, dan metadata. Audit tidak dapat diubah dari UI.
 
 ## 6. Pelaporan insiden
 
-Jika key atau token dicurigai bocor:
+Jika device key dicurigai bocor:
 
-1. Rotasi `DEVICE_API_KEY` dari halaman Perangkat (key lama langsung mati).
-2. Naikkan `token_version` user terkait (ganti password) atau nonaktifkan akun.
-3. Rotasi `SECRET_KEY` dan restart semua instance (mencabut semua JWT).
-4. Periksa audit trail untuk aksi mencurigakan dan command yang tidak dikenal.
-5. Periksa log perangkat; cocokkan `command_uid` dengan audit.
-6. Jika menyangkut keselamatan fisik, hentikan gantry dengan E-stop fisik.
+1. Rotasi key dari halaman **Perangkat** (key lama langsung mati).
+2. Periksa audit trail untuk aksi mencurigakan dan command yang tidak dikenal.
+3. Periksa log perangkat; cocokkan `command_uid` dengan audit.
+4. Jika menyangkut keselamatan fisik, hentikan gantry dengan E-stop fisik.
+5. Setelah autentikasi dipulihkan, cabut sesi dan rotasi kredensial terkait.

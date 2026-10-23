@@ -1,7 +1,11 @@
 """Application configuration.
 
-All secrets and deployment-specific values come from environment variables
-(or a local .env file that is never committed). See .env.example.
+All deployment-specific values come from environment variables (or a local
+.env file that is never committed). See .env.example.
+
+This presentation build has no user accounts. ``DEMO_MODE`` keeps the UI open
+and keeps the seeded gantry shown as online. Never enable demo mode in
+production; the validator below refuses to start if you try.
 """
 from __future__ import annotations
 
@@ -15,16 +19,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 
-WEAK_SECRETS = {
-    "supersecretkey",
-    "change-me",
-    "changeme",
-    "secret",
-    "dev",
-    "development",
-    "your-secret-key",
-}
-
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -36,19 +30,14 @@ class Settings(BaseSettings):
 
     # Core
     app_name: str = "AutoFeeder Rail Gantry"
-    app_version: str = "1.0.0"
+    app_version: str = "1.1.0-demo"
     environment: Literal["development", "test", "production"] = "development"
     debug: bool = False
     api_prefix: str = "/api"
     timezone: str = "Asia/Jakarta"
 
-    # Security
-    secret_key: str = Field(min_length=32)
-    access_token_expire_minutes: int = Field(default=60, ge=5, le=1440)
-    login_max_attempts: int = Field(default=5, ge=3, le=20)
-    login_window_seconds: int = Field(default=600, ge=60, le=3600)
-    login_lockout_seconds: int = Field(default=900, ge=60, le=86400)
-    allow_registration: bool = True
+    # Presentation mode (no accounts)
+    demo_mode: bool = True
     public_monitoring: bool = False
     cors_origins: str = "http://localhost:5174,http://127.0.0.1:5174"
     allowed_hosts: str = "localhost,127.0.0.1,testserver"
@@ -75,9 +64,8 @@ class Settings(BaseSettings):
 
     # Seed / demo (never enable in production)
     seed_demo: bool = True
-    demo_password_admin: str = "Admin#12345"
-    demo_password_owner: str = "Pemilik#12345"
-    demo_password_operator: str = "Petani#12345"
+    seed_demo_history: bool = True
+    demo_history_days: int = Field(default=14, ge=1, le=90)
 
     # Optional Fish Linker integration
     fishlinker_database_url: str | None = None
@@ -96,24 +84,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_security(self) -> "Settings":
-        weak_values = {v.lower() for v in WEAK_SECRETS}
-        secret = (self.secret_key or "").lower()
         device_key = (self.device_api_key or "").lower()
         if (
-            secret in weak_values
-            or secret.startswith(("change-me", "changeme", "secret", "dev-"))
-            or len(set(secret)) < 12
-        ):
-            raise ValueError("SECRET_KEY terlalu lemah. Gunakan nilai acak minimal 32 karakter.")
-        if (
-            device_key in weak_values
-            or device_key.startswith(("change-me", "changeme", "secret", "dev-"))
+            device_key.startswith(("change-me", "changeme", "secret", "dev-"))
             or len(set(device_key)) < 8
         ):
             raise ValueError("DEVICE_API_KEY terlalu lemah. Gunakan nilai acak minimal 24 karakter.")
         if self.is_production:
-            if self.seed_demo:
-                raise ValueError("SEED_DEMO harus false di production.")
+            if self.seed_demo or self.seed_demo_history:
+                raise ValueError("SEED_DEMO dan SEED_DEMO_HISTORY harus false di production.")
+            if self.demo_mode:
+                raise ValueError("DEMO_MODE harus false di production.")
             if self.debug:
                 raise ValueError("DEBUG harus false di production.")
         return self

@@ -187,7 +187,6 @@ def dashboard(
         "role": user.role,
         "permissions": {
             "manage_schedule": user.role in ADMIN_ROLES,
-            "manage_users": user.role in ADMIN_ROLES,
             "manage_feed": user.role in ADMIN_ROLES,
             "reset_device": user.role in ADMIN_ROLES,
         },

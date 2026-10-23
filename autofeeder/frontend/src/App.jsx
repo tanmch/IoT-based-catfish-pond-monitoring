@@ -1,10 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { BrowserRouter, NavLink, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
-import { api, clearSession, getToken, getStoredUser } from './api.js'
+import { BrowserRouter, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { fmtClock } from './utils.js'
 import { useClock } from './hooks.js'
-import { Alert, Modal, RoleBadge } from './components/ui.jsx'
-import LoginPage from './pages/LoginPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import SchedulesPage from './pages/SchedulesPage.jsx'
 import ManualFeedPage from './pages/ManualFeedPage.jsx'
@@ -12,7 +9,10 @@ import HistoryPage from './pages/HistoryPage.jsx'
 import AlarmsPage from './pages/AlarmsPage.jsx'
 import AuditPage from './pages/AuditPage.jsx'
 import DevicesPage from './pages/DevicesPage.jsx'
-import UsersPage from './pages/UsersPage.jsx'
+
+// Presentation build: no login, no accounts. Pages still receive this identity
+// so their existing admin controls remain visible.
+const DEMO_USER = { id: 1, username: 'Operator Demo', role: 'admin' }
 
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
@@ -21,80 +21,21 @@ const NAV = [
   { to: '/riwayat', label: 'Riwayat' },
   { to: '/alarm', label: 'Alarm' },
   { to: '/perangkat', label: 'Perangkat' },
-  { to: '/audit', label: 'Audit Trail', admin: true },
-  { to: '/pengguna', label: 'Pengguna', admin: true },
+  { to: '/audit', label: 'Audit Trail' },
 ]
 
 export default function App() {
-  const [user, setUser] = useState(getStoredUser())
-  const [booting, setBooting] = useState(Boolean(getToken()))
-
-  useEffect(() => {
-    let active = true
-    if (!getToken()) {
-      setBooting(false)
-      return undefined
-    }
-    api
-      .me()
-      .then((data) => {
-        if (active) setUser(data)
-      })
-      .catch(() => {
-        clearSession()
-        if (active) setUser(null)
-      })
-      .finally(() => active && setBooting(false))
-    return () => {
-      active = false
-    }
-  }, [])
-
-  useEffect(() => {
-    const handler = () => setUser(null)
-    window.addEventListener('autofeeder:unauthorized', handler)
-    return () => window.removeEventListener('autofeeder:unauthorized', handler)
-  }, [])
-
-  if (booting) {
-    return <div className="boot">Memuat sesi…</div>
-  }
-
-  if (!user) {
-    return <LoginPage onLogin={setUser} />
-  }
-
-  const logout = () => {
-    clearSession()
-    setUser(null)
-  }
-
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Layout user={user} onLogout={logout} />}>
-          <Route index element={<DashboardPage user={user} />} />
-          <Route path="jadwal" element={<SchedulesPage user={user} />} />
-          <Route path="manual" element={<ManualFeedPage user={user} />} />
-          <Route path="riwayat" element={<HistoryPage user={user} />} />
-          <Route path="alarm" element={<AlarmsPage user={user} />} />
-          <Route path="perangkat" element={<DevicesPage user={user} />} />
-          <Route
-            path="audit"
-            element={
-              <AdminOnly user={user}>
-                <AuditPage user={user} />
-              </AdminOnly>
-            }
-          />
-          <Route
-            path="pengguna"
-            element={
-              <AdminOnly user={user}>
-                <UsersPage user={user} />
-              </AdminOnly>
-            }
-          />
+        <Route element={<Layout user={DEMO_USER} />}>
+          <Route index element={<DashboardPage user={DEMO_USER} />} />
+          <Route path="jadwal" element={<SchedulesPage user={DEMO_USER} />} />
+          <Route path="manual" element={<ManualFeedPage user={DEMO_USER} />} />
+          <Route path="riwayat" element={<HistoryPage user={DEMO_USER} />} />
+          <Route path="alarm" element={<AlarmsPage user={DEMO_USER} />} />
+          <Route path="perangkat" element={<DevicesPage user={DEMO_USER} />} />
+          <Route path="audit" element={<AuditPage user={DEMO_USER} />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
@@ -102,12 +43,10 @@ export default function App() {
   )
 }
 
-function Layout({ user, onLogout }) {
+function Layout({ user }) {
   const now = useClock()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [passwordOpen, setPasswordOpen] = useState(false)
   const location = useLocation()
-  const isAdmin = ['admin', 'pemilik'].includes(user.role)
 
   useEffect(() => {
     setMenuOpen(false)
@@ -124,7 +63,7 @@ function Layout({ user, onLogout }) {
           </div>
         </div>
         <nav className="nav">
-          {NAV.filter((item) => !item.admin || isAdmin).map((item) => (
+          {NAV.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -138,16 +77,9 @@ function Layout({ user, onLogout }) {
         <div className="sidebar-foot">
           <div className="user-line">
             <span>{user.username}</span>
-            <RoleBadge role={user.role} />
+            <span className="pill neutral">Mode Demo</span>
           </div>
-          <div className="page-actions">
-            <button type="button" className="btn sm" onClick={() => setPasswordOpen(true)}>
-              Ganti password
-            </button>
-            <button type="button" className="btn sm" onClick={onLogout}>
-              Keluar
-            </button>
-          </div>
+          <div className="muted small">Data dummy untuk presentasi</div>
         </div>
       </aside>
 
@@ -165,67 +97,11 @@ function Layout({ user, onLogout }) {
           <Outlet />
         </main>
         <footer className="app-foot muted small">
-          AutoFeeder Rail Gantry · mode {user.role === 'petani' ? 'operator' : user.role} · semua waktu WIB
+          AutoFeeder Rail Gantry · mode demo presentasi · semua waktu WIB
         </footer>
       </div>
-
-      <PasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} onLogout={onLogout} />
     </div>
   )
-}
-
-function PasswordModal({ open, onClose, onLogout }) {
-  const [current, setCurrent] = useState('')
-  const [next, setNext] = useState('')
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  async function submit(event) {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-      await api.changePassword({ current_password: current, new_password: next })
-      setNotice('Password diubah. Sesi lama dicabut; silakan login kembali.')
-      setCurrent('')
-      setNext('')
-      setTimeout(() => {
-        onClose()
-        onLogout()
-      }, 1400)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Modal open={open} title="Ganti password" onClose={onClose} footer={null}>
-      <form className="form-stack" onSubmit={submit}>
-        {error ? <Alert tone="danger">{error}</Alert> : null}
-        {notice ? <Alert tone="ok">{notice}</Alert> : null}
-        <label className="field">
-          <span className="field-label">Password saat ini</span>
-          <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
-        </label>
-        <label className="field">
-          <span className="field-label">Password baru</span>
-          <input type="password" minLength={10} value={next} onChange={(e) => setNext(e.target.value)} required />
-          <span className="field-hint">Minimal 10 karakter. Semua sesi lama akan dicabut.</span>
-        </label>
-        <button type="submit" className="btn primary" disabled={busy}>
-          {busy ? 'Menyimpan…' : 'Simpan password'}
-        </button>
-      </form>
-    </Modal>
-  )
-}
-
-function AdminOnly({ user, children }) {
-  if (!['admin', 'pemilik'].includes(user.role)) return <Navigate to="/" replace />
-  return children
 }
 
 function NotFound() {

@@ -8,8 +8,8 @@ diuji secara independen. Status ditandai `[x]` (selesai di repo ini), `[~]`
 
 | Plan | Fokus | Status |
 |---|---|---|
-| P0 | Fondasi proyek & keamanan dasar | `[x]` |
-| P1 | Data, peran, dan integrasi Fish Linker | `[x]` |
+| P0 | Fondasi proyek & mode presentasi | `[x]` |
+| P1 | Data dan integrasi Fish Linker | `[x]` |
 | P2 | Monitoring perangkat & telemetri | `[x]` |
 | P3 | Jadwal, porsi, dan feeding otomatis | `[x]` |
 | P4 | Kendali manual, keselamatan, alarm | `[x]` |
@@ -20,10 +20,10 @@ diuji secara independen. Status ditandai `[x]` (selesai di repo ini), `[~]`
 
 ---
 
-## P0 — Fondasi proyek & keamanan dasar
+## P0 — Fondasi proyek & mode presentasi
 
-**Tujuan:** aplikasi dapat dijalankan tanpa menyentuh aplikasi Fish Linker, dengan
-postur keamanan yang layak sejak awal.
+**Tujuan:** aplikasi dapat dijalankan tanpa menyentuh aplikasi Fish Linker, tanpa
+halaman login, dan dengan data presentasi yang siap pakai.
 
 **Deliverable**
 
@@ -32,9 +32,9 @@ postur keamanan yang layak sejak awal.
 - [x] SQLite untuk demo lokal; MySQL via `DATABASE_URL`.
 - [x] Semua tabel baru berprefix `feeder_`.
 - [x] `.env.example` tanpa secret nyata; `.env` di-`.gitignore`.
-- [x] Validasi secret lemah ditolak saat startup.
-- [x] JWT HS256 60 menit, bcrypt cost 12, `token_version` untuk revokasi.
-- [x] Rate limit login per IP + identifier, lockout sementara.
+- [x] Validasi device key lemah ditolak saat startup.
+- [x] Mode presentasi tanpa login/akun/RBAC (`DEMO_MODE=true`).
+- [x] Production menolak mode demo dan seed demo.
 - [x] Security headers (CSP, X-Frame-Options, nosniff, Referrer-Policy).
 - [x] CORS dan TrustedHost dibatasi lewat environment.
 - [x] Dokumentasi Swagger dimatikan di production.
@@ -42,32 +42,34 @@ postur keamanan yang layak sejak awal.
 **Kriteria selesai**
 
 - `GET /api/health` mengembalikan `status=ok`.
-- Login salah berulang menghasilkan `429`.
+- UI langsung terbuka tanpa halaman login.
+- Tidak ada endpoint `/api/auth/*` atau `/api/users`.
 - Tidak ada secret yang muncul di `git status` atau log.
 
 ---
 
-## P1 — Data, peran, dan integrasi Fish Linker
+## P1 — Data dan integrasi Fish Linker
 
-**Tujuan:** model data operasional 20 kolam dan aturan akses yang jelas.
+**Tujuan:** model data operasional 20 kolam yang siap dipresentasikan.
 
 **Deliverable**
 
-- [x] Tabel `feeder_users`, `feeder_ponds`, `feeder_pond_assignments`.
-- [x] Peran `admin`, `pemilik`, `petani`.
-- [x] Admin/pemilik: semua kolam, jadwal, pengguna, perangkat, audit.
-- [x] Petani: hanya kolam yang ditugaskan; boleh membuat jadwal spesifik kolam.
+- [x] Tabel `feeder_ponds`, `feeder_schedules`, `feeder_runs`, `feeder_commands`.
+- [x] Satu identitas operator demo untuk atribusi audit (tanpa password).
 - [x] `fishlinker_kolam_id` untuk pemetaan ke tabel `kolam`.
-- [x] Seed demo 20 kolam (10 kiri, 10 kanan), 3 pengguna, 750 kg pakan.
+- [x] Seed demo 20 kolam (10 kiri, 10 kanan), 750 kg pakan, jadwal 2x sehari.
+- [x] Data presentasi 14 hari: ±560 run, ±550 command, ±670 telemetry, 6 alarm,
+      8 audit, stok pakan tersisa ±214 kg.
 - [x] Endpoint biomassa per kolam untuk porsi persen biomassa.
 - [x] Peta integrasi dan contoh SQL di `docs/INTEGRATION.md`.
 - [ ] Skrip sinkronisasi otomatis dari Fish Linker (cron/worker).
 - [ ] Alembic untuk migrasi produksi.
+- [ ] Autentikasi & RBAC untuk produksi (dihapus dari build presentasi).
 
 **Kriteria selesai**
 
-- Petani mendapat `403` saat mengakses kolam di luar penugasan.
 - Data 20 kolam tampil konsisten di dashboard dan peta gantry.
+- Riwayat 14 hari terisi otomatis saat database baru dibuat.
 - Tidak ada foreign key yang mengikat ke tabel Fish Linker.
 
 ---
@@ -168,9 +170,9 @@ berisiko.
 - [x] Detail run beserta command dan hasil aktual.
 - [x] Ekspor CSV riwayat feeding dan telemetri.
 - [x] Halaman audit trail dengan filter aksi/entitas/pengguna.
-- [x] Audit untuk login, perubahan jadwal, manual feed, E-stop, reset, rotasi key,
-      perubahan pengguna, dan aksi alarm.
-- [x] Audit mencatat aktor, peran, IP, waktu WIB, dan metadata.
+- [x] Audit untuk perubahan jadwal, manual feed, E-stop, reset, rotasi key,
+      dan aksi alarm.
+- [x] Audit mencatat aktor demo, peran, IP, waktu WIB, dan metadata.
 - [x] Cetak laporan (print-friendly) dari halaman riwayat.
 - [x] Ekspor PDF server-side dengan kop laporan (ReportLab).
 - [ ] Penandatanganan/immutability audit untuk kebutuhan kepatuhan tinggi.
@@ -179,7 +181,7 @@ berisiko.
 
 - Setiap perubahan jadwal muncul di audit < 1 detik setelah commit.
 - CSV dapat dibuka di Excel dengan kolom waktu WIB.
-- Riwayat petani hanya berisi kolam yang ditugaskan.
+- Ekspor PDF berisi seluruh data sesuai filter aktif.
 
 ---
 
@@ -191,8 +193,7 @@ Material UI.
 **Deliverable**
 
 - [x] HTML/CSS sederhana dengan React 18 + Vite (tanpa framework UI berat).
-- [x] Login, dashboard, jadwal, manual feed, riwayat, alarm, perangkat, audit,
-      pengguna.
+- [x] Dashboard, jadwal, manual feed, riwayat, alarm, perangkat, audit.
 - [x] Peta gantry 10 kiri + 10 kanan dengan status dan porsi efektif.
 - [x] Grafik telemetri ringan (SVG, tanpa library chart besar).
 - [x] Jam WIB live dan format tanggal Indonesia.
@@ -206,7 +207,7 @@ Material UI.
 **Kriteria selesai**
 
 - `npm run build` tanpa error.
-- Semua halaman dapat diakses sesuai peran.
+- Semua halaman dapat diakses langsung tanpa login.
 - Tidak ada horizontal scroll pada lebar 768 px.
 - Aksi berbahaya selalu meminta konfirmasi.
 
@@ -218,10 +219,10 @@ Material UI.
 
 **Deliverable**
 
-- [x] 20 tes API: auth, RBAC, scope kolam, jadwal, perangkat, telemetry, manual
+- [x] 18 tes API: mode demo tanpa akun, jadwal, perangkat, telemetry, manual
       feed, stok, replay, idempotency, scheduler, prioritas jadwal efektif, hopper
-      kosong, expiry, E-stop, alarm, rotasi key, CSV, audit, pembatalan command,
-      penolakan token tanpa versi.
+      kosong, expiry, E-stop, alarm, rotasi key, CSV, PDF, audit, pembatalan
+      command.
 - [x] Simulator perangkat stdlib (`simulator/device_sim.py`).
 - [x] `start.sh` untuk setup + build + run.
 - [x] Dokumentasi device API dan integrasi.
@@ -249,7 +250,8 @@ Material UI.
 - [ ] HTTPS di reverse proxy, HSTS aktif, HTTP diarahkan ke HTTPS.
 - [ ] Secret manager (bukan file `.env`) untuk production.
 - [ ] Rate limit terdistribusi (Redis) untuk multi-worker.
-- [ ] Rotasi JWT/secret dan prosedur pencabutan sesi.
+- [ ] Implementasikan ulang autentikasi, sesi, dan RBAC (dihapus dari build demo).
+- [ ] Prosedur pencabutan sesi dan rotasi kredensial.
 - [ ] Backup harian + retensi + uji restore.
 - [ ] Monitoring uptime, alert ke tim operasional.
 - [ ] Runbook insiden: hopper tumpah, motor macet, offline lama, E-stop.
@@ -258,7 +260,7 @@ Material UI.
 **Fitur lanjutan**
 
 - [ ] Alembic dan kebijakan migrasi zero-downtime.
-- [ ] Sinkronisasi otomatis Fish Linker (users, kolam, biomassa, stok).
+- [ ] Sinkronisasi otomatis Fish Linker (kolam, biomassa, stok).
 - [ ] Webhook/event bus untuk `run.dispensed` dan alarm kritis.
 - [ ] Adapter MQTT/TLS di samping REST untuk skala banyak gantry.
 - [ ] Dukungan lebih dari satu gantry dan penjadwalan lintas gantry.
@@ -272,7 +274,7 @@ Material UI.
 
 ## Urutan eksekusi yang disarankan
 
-1. **Minggu 1:** P0 + P1 — jalankan demo, verifikasi peran dan data 20 kolam.
+1. **Minggu 1:** P0 + P1 — jalankan demo, verifikasi data 20 kolam dan dummy.
 2. **Minggu 2:** P2 + P3 — sambungkan simulator, uji jadwal dan porsi.
 3. **Minggu 3:** P4 + P5 — uji manual feed, E-stop, alarm, audit, ekspor.
 4. **Minggu 4:** P6 + P7 — rapikan UI, jalankan seluruh tes, uji lapangan terbatas.
@@ -283,6 +285,6 @@ Material UI.
 - 20 kolam dapat dipantau dan dijadwalkan dari satu dashboard.
 - Feeding otomatis berjalan tanpa intervensi dan tetap jalan saat offline.
 - Setiap feeding memiliki target, aktual, status, dan jejak audit.
-- Aksi berbahaya memerlukan peran yang tepat dan konfirmasi.
+- Aksi berbahaya memerlukan konfirmasi; RBAC ditambahkan kembali untuk produksi.
 - Tidak ada secret di repository; semua konfigurasi lewat environment.
 - Dokumentasi operator, device API, dan integrasi tersedia.

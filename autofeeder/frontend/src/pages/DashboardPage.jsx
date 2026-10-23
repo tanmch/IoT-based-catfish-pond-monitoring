@@ -297,7 +297,7 @@ export default function DashboardPage({ user }) {
               <InfoRow label="Server generated" value={fmtDateTime(data.generated_at)} />
               <InfoRow label="Terakhir telemetry" value={fmtDateTime(data.telemetry?.recorded_at)} />
               <InfoRow label="Terakhir perangkat" value={fmtDateTime(data.device?.last_seen_at)} />
-              <InfoRow label="Mode akses" value={user.role === 'petani' ? 'Operator (kolam ditugaskan)' : 'Penuh'} />
+              <InfoRow label="Mode akses" value="Demo presentasi (semua kolam)" />
             </div>
           </Card>
         </div>

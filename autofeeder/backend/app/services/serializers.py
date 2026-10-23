@@ -7,18 +7,6 @@ from .. import models
 from .timeutil import iso_wib
 
 
-def user_dict(user: models.User) -> dict[str, Any]:
-    return {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "role": user.role,
-        "is_active": user.is_active,
-        "created_at": iso_wib(user.created_at),
-        "last_login_at": iso_wib(user.last_login_at),
-    }
-
-
 def pond_dict(pond: models.Pond) -> dict[str, Any]:
     return {
         "id": pond.id,

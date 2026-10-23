@@ -132,6 +132,24 @@ export const STATUS_LABEL = {
   pond: 'Kolam',
 }
 
+export const REASON_LABEL = {
+  PERAWATAN_KOLAM: 'Perawatan kolam',
+  JADWAL_DILEWATI: 'Jadwal dilewati',
+  KOLAM_DIKOSONGKAN: 'Kolam dikosongkan',
+  MOTOR_TIMEOUT: 'Motor timeout',
+  PAKAN_TIDAK_TERDETEKSI: 'Pakan tidak terdeteksi',
+  GANTRY_FAULT: 'Gangguan gantry',
+  STOK_PAKAN_TIDAK_CUKUP: 'Stok pakan tidak cukup',
+  PAKAN_HOPPER_TIDAK_CUKUP: 'Pakan hopper tidak cukup',
+  PERINTAH_KEDALUWARSA: 'Perintah kedaluwarsa',
+  JADWAL_DIUBAH: 'Jadwal diubah',
+  JADWAL_NONAKTIF: 'Jadwal nonaktif',
+}
+
+export function reasonLabel(value) {
+  return REASON_LABEL[value] || value || '—'
+}
+
 export function label(value) {
   return STATUS_LABEL[value] || value || '—'
 }

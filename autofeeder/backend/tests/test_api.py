@@ -2,105 +2,28 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-import time
-
-import jwt
 from fastapi.testclient import TestClient
 
 from app import models
-from app.config import settings
 from app.database import SessionLocal
 from app.services import feeder
 from app.services.timeutil import planned_utc_naive, to_wib, utcnow
 from tests.conftest import device_headers, login, send_telemetry
 
 
-def test_health_and_authentication_required(client: TestClient):
+def test_health_and_open_demo_mode(client: TestClient):
     assert client.get("/api/health").status_code == 200
-    assert client.get("/api/dashboard").status_code == 401
+    dashboard = client.get("/api/dashboard")
+    assert dashboard.status_code == 200
+    assert dashboard.json()["role"] == "admin"
+    # Device endpoints remain protected by the device key.
     assert client.get("/api/device/commands").status_code == 401
 
 
-def test_login_me_and_wrong_password(client: TestClient):
-    headers = login(client, "pemilik")
-    me = client.get("/api/auth/me", headers=headers)
-    assert me.status_code == 200
-    assert me.json()["role"] == "pemilik"
-
-    bad = client.post("/api/auth/login", json={"identifier": "pemilik", "password": "salah"})
-    assert bad.status_code == 401
-    assert "password" in bad.json()["detail"].lower()
-
-
-def test_token_without_version_is_rejected(client: TestClient):
-    token = jwt.encode(
-        {
-            "sub": "admin@fishlinker.local",
-            "uid": 1,
-            "role": "admin",
-            "exp": int(time.time()) + 3600,
-        },
-        settings.secret_key,
-        algorithm="HS256",
-    )
-    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
-    assert response.status_code == 401
-
-
-def test_role_scope_for_new_operator(client: TestClient):
-    admin = login(client, "admin")
-    created = client.post(
-        "/api/users",
-        headers=admin,
-        json={
-            "username": "petani2",
-            "email": "petani2@example.com",
-            "password": "PetaniBaru#123",
-            "role": "petani",
-        },
-    )
-    assert created.status_code == 201, created.text
-    user_id = created.json()["id"]
-
-    headers = login(client, "petani2", "PetaniBaru#123")
-    assert client.get("/api/ponds", headers=headers).json() == []
-    assert client.get("/api/ponds/1", headers=headers).status_code == 403
-    assert client.post(
-        "/api/commands/manual-feed",
-        headers=headers,
-        json={"pond_id": 1, "portion_grams": 500, "confirm": True},
-    ).status_code == 403
-    assert client.get("/api/users", headers=headers).status_code == 403
-
-    assign = client.put(f"/api/users/{user_id}/ponds", headers=admin, json={"pond_ids": [1]})
-    assert assign.status_code == 200
-    assert client.get("/api/ponds/1", headers=headers).status_code == 200
-    assert client.get("/api/ponds/2", headers=headers).status_code == 403
-
-
-def test_operator_cannot_edit_global_schedule_but_can_edit_own_pond(client: TestClient):
-    headers = login(client, "operator")
-    global_payload = {
-        "scope": "global",
-        "feeding_times": ["08:00"],
-        "portion_mode": "fixed",
-        "portion_grams": 1000,
-    }
-    assert client.post("/api/schedules", headers=headers, json=global_payload).status_code == 403
-
-    pond_payload = {
-        "scope": "pond",
-        "pond_id": 1,
-        "feeding_times": ["08:00", "12:00", "16:00"],
-        "portion_mode": "percent",
-        "biomass_percent": 2,
-    }
-    response = client.post("/api/schedules", headers=headers, json=pond_payload)
-    assert response.status_code == 201, response.text
-    assert response.json()["overrides"] == []
-
-    too_many = {**pond_payload, "feeding_times": ["07:00", "09:00", "12:00", "16:00"]}
-    assert client.post("/api/schedules", headers=headers, json=too_many).status_code == 422
+def test_account_endpoints_are_gone(client: TestClient):
+    assert client.post("/api/auth/login", json={"identifier": "admin", "password": "x"}).status_code in {404, 405}
+    assert client.get("/api/users").status_code == 404
+    assert client.get("/api/auth/me").status_code == 404
 
 
 def test_schedule_validation_and_override(client: TestClient):
@@ -352,10 +275,9 @@ def test_expired_command_fails_run(client: TestClient):
         assert run.failure_reason == "PERINTAH_KEDALUWARSA"
 
 
-def test_command_cancel_is_restricted(client: TestClient):
+def test_command_cancel_rules(client: TestClient):
     send_telemetry(client)
     operator = login(client, "operator")
-    admin = login(client, "admin")
 
     estop = client.post(
         "/api/commands/estop",
@@ -364,18 +286,17 @@ def test_command_cancel_is_restricted(client: TestClient):
     )
     assert estop.status_code == 201, estop.text
     estop_uid = estop.json()["command_uid"]
-    denied = client.post(f"/api/commands/{estop_uid}/cancel", headers=admin)
+    denied = client.post(f"/api/commands/{estop_uid}/cancel")
     assert denied.status_code == 403
 
-    admin_feed = client.post(
+    feed = client.post(
         "/api/commands/manual-feed",
-        headers=admin,
+        headers=operator,
         json={"pond_id": 1, "portion_grams": 500, "confirm": True},
     )
-    assert admin_feed.status_code == 201, admin_feed.text
-    uid = admin_feed.json()["command"]["command_uid"]
-    assert client.post(f"/api/commands/{uid}/cancel", headers=operator).status_code == 403
-    assert client.post(f"/api/commands/{uid}/cancel", headers=admin).status_code == 200
+    assert feed.status_code == 201, feed.text
+    uid = feed.json()["command"]["command_uid"]
+    assert client.post(f"/api/commands/{uid}/cancel").status_code == 200
 
 
 def test_emergency_stop_creates_priority_command(client: TestClient):
@@ -390,13 +311,7 @@ def test_emergency_stop_creates_priority_command(client: TestClient):
     assert response.json()["kind"] == "emergency_stop"
     assert response.json()["priority"] == 100
 
-    reset_forbidden = client.post(
-        "/api/commands/reset", headers=operator, json={"confirm": True}
-    )
-    assert reset_forbidden.status_code == 403
-    reset_allowed = client.post(
-        "/api/commands/reset", headers=login(client, "admin"), json={"confirm": True}
-    )
+    reset_allowed = client.post("/api/commands/reset", json={"confirm": True})
     assert reset_allowed.status_code == 201
 
 
@@ -417,10 +332,7 @@ def test_alarm_acknowledge_and_resolve(client: TestClient):
 
 def test_device_key_rotation(client: TestClient):
     send_telemetry(client)
-    admin = login(client, "admin")
-    operator = login(client, "operator")
-    assert client.post("/api/devices/lele-gantry-001/rotate-key", headers=operator).status_code == 403
-    rotated = client.post("/api/devices/lele-gantry-001/rotate-key", headers=admin)
+    rotated = client.post("/api/devices/lele-gantry-001/rotate-key")
     assert rotated.status_code == 200, rotated.text
     new_key = rotated.json()["api_key"]
 
@@ -455,28 +367,38 @@ def test_csv_exports_and_public_mode_disabled(client: TestClient):
     assert client.get("/api/public/summary").status_code == 404
 
 
-def test_pdf_export_returns_pdf_and_respects_roles(client: TestClient):
+def test_pdf_export_returns_pdf(client: TestClient):
     send_telemetry(client)
-    admin = login(client, "admin")
-    pdf = client.get("/api/runs/export.pdf", headers=admin)
+    pdf = client.get("/api/runs/export.pdf")
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
     assert "attachment" in pdf.headers["content-disposition"]
     assert pdf.content.startswith(b"%PDF")
     assert len(pdf.content) > 1000
 
-    operator = login(client, "operator")
-    scoped = client.get("/api/runs/export.pdf", headers=operator)
+    scoped = client.get("/api/runs/export.pdf?pond_id=1")
     assert scoped.status_code == 200
     assert scoped.content.startswith(b"%PDF")
 
-    assert client.get("/api/runs/export.pdf").status_code == 401
 
+def test_audit_trail_is_open_in_demo_mode(client: TestClient):
+    with SessionLocal() as db:
+        demo = db.query(models.User).filter(models.User.username == "Operator Demo").first()
+        assert demo is not None
+        assert demo.role == "admin"
 
-def test_audit_trail_is_admin_only(client: TestClient):
-    login(client, "admin")
-    admin = login(client, "admin")
-    data = client.get("/api/audit", headers=admin).json()
+    created = client.post(
+        "/api/schedules",
+        json={
+            "scope": "global",
+            "feeding_times": ["06:30", "17:00"],
+            "portion_mode": "fixed",
+            "portion_grams": 900,
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    data = client.get("/api/audit").json()
     assert data["total"] >= 1
-    assert any(item["action"] == "auth.login" for item in data["items"])
-    assert client.get("/api/audit", headers=login(client, "operator")).status_code == 403
+    assert any(item["action"] == "schedule.create" for item in data["items"])
+    assert all(item["username"] == "Operator Demo" for item in data["items"] if item["action"] == "schedule.create")

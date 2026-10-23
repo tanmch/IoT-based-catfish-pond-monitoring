@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { api } from '../api.js'
 import { usePolling } from '../hooks.js'
 import { Alert, Card, Empty, Field, Loading, PageHeader, Pagination, StatusPill } from '../components/ui.jsx'
-import { buildQuery, daysAgoInput, fmtDateTime, fmtGrams, fmtNumber, label, todayInput } from '../utils.js'
+import { buildQuery, daysAgoInput, fmtDateTime, fmtGrams, fmtNumber, label, reasonLabel, todayInput } from '../utils.js'
 
 const LIMIT = 50
 
@@ -139,7 +139,7 @@ export default function HistoryPage() {
                         <td>{deviation == null ? '—' : `${deviation > 0 ? '+' : ''}${fmtNumber(deviation, 1)}%`}</td>
                         <td>{fmtNumber(run.rotary_rotations, 2)}</td>
                         <td><StatusPill status={run.status} /></td>
-                        <td>{run.failure_reason || '—'}</td>
+                        <td>{run.failure_reason ? reasonLabel(run.failure_reason) : '—'}</td>
                         <td><code>{run.command?.command_uid?.slice(0, 10) || '—'}</code></td>
                       </tr>
                     )

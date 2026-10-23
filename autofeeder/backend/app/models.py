@@ -32,21 +32,15 @@ def utcnow() -> datetime:
 
 
 class User(Base):
+    """Internal operator identity used for audit attribution (no login)."""
+
     __tablename__ = "feeder_users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
-    email: Mapped[str] = mapped_column(String(150), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(30), nullable=False, default="petani", index=True)
+    role: Mapped[str] = mapped_column(String(30), nullable=False, default="admin", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    pond_assignments: Mapped[list["PondAssignment"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
 
 
 class Pond(Base):
@@ -64,29 +58,9 @@ class Pond(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
 
-    assignments: Mapped[list["PondAssignment"]] = relationship(
-        back_populates="pond", cascade="all, delete-orphan"
-    )
     overrides: Mapped[list["ScheduleOverride"]] = relationship(
         back_populates="pond", cascade="all, delete-orphan"
     )
-
-
-class PondAssignment(Base):
-    __tablename__ = "feeder_pond_assignments"
-    __table_args__ = (UniqueConstraint("user_id", "pond_id", name="uq_feeder_assignment"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("feeder_users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    pond_id: Mapped[int] = mapped_column(
-        ForeignKey("feeder_ponds.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
-
-    user: Mapped["User"] = relationship(back_populates="pond_assignments")
-    pond: Mapped["Pond"] = relationship(back_populates="assignments")
 
 
 class Schedule(Base):

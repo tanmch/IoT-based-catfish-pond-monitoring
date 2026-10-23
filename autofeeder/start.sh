@@ -34,16 +34,12 @@ if [[ ! -f .venv/.deps-ok || requirements.txt -nt .venv/.deps-ok ]]; then
 fi
 
 if [[ ! -f .env ]]; then
-  log "Membuat backend/.env dengan secret acak…"
+  log "Membuat backend/.env dengan device key acak…"
   .venv/bin/python - <<'PY'
 from pathlib import Path
 import secrets
 
 example = Path(".env.example").read_text(encoding="utf-8")
-example = example.replace(
-    "SECRET_KEY=replace-with-64-random-characters-from-secrets-token-urlsafe",
-    f"SECRET_KEY={secrets.token_urlsafe(48)}",
-)
 example = example.replace(
     "DEVICE_API_KEY=replace-with-a-random-device-key-min-24-chars",
     f"DEVICE_API_KEY=fg_{secrets.token_urlsafe(32)}",
@@ -80,6 +76,7 @@ if [[ "$MODE" == "--reload" ]]; then
 fi
 
 log "API + UI: http://127.0.0.1:8010"
+log "Mode presentasi: tanpa login, data dummy 14 hari sudah disiapkan."
 log "Dokumentasi API: http://127.0.0.1:8010/docs"
 log "Simulator (terminal lain): python3 simulator/device_sim.py"
 exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010
