@@ -24,3 +24,6 @@ dist-ssr/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Frontend demo build output
+frontend/dist-demo/

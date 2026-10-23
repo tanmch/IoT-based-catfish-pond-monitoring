@@ -429,7 +429,7 @@ function ScheduleEditor({ editor, setEditor, ponds, isAdmin, onSaved, onError })
                 type="number"
                 min="1"
                 max="10000"
-                step="10"
+                step="1"
                 value={form.portion_grams}
                 onChange={(e) => update({ portion_grams: e.target.value })}
                 required

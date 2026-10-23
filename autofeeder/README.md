@@ -84,6 +84,41 @@ Mode pengembangan:
 ./start.sh --reload   # API :8010 dengan auto-reload
 ```
 
+### Demo frontend tanpa backend
+
+Untuk presentasi yang hanya membutuhkan UI, seluruh data dummy dapat dimuat
+langsung dari bundle frontend. Tidak ada request ke `/api` dan backend tidak
+perlu dijalankan:
+
+```bash
+cd autofeeder
+./start-demo.sh
+```
+
+Buka **http://127.0.0.1:5174**. Script membangun `dist-demo/` dengan
+`VITE_USE_MOCK=true`, lalu menyajikannya lewat Vite preview.
+
+Alternatif manual:
+
+```bash
+cd autofeeder/frontend
+npm run dev:demo       # Vite dev server + data tertanam
+npm run demo           # build dist-demo/ lalu preview :5174
+```
+
+Mode ini **tidak menghapus integrasi backend**. Build default tetap memakai API
+sungguhan:
+
+```bash
+npm run dev            # proxy /api ke :8010
+npm run build          # dist/ untuk disajikan backend
+```
+
+Data demo tertanam mencakup 20 kolam, riwayat 14 hari, telemetry, alarm, audit,
+jadwal, stok, dan antrean command. Aksi demo (akui alarm, jeda jadwal, manual
+feed) memperbarui state di memori dan akan kembali ke data awal saat halaman
+di-refresh. Ekspor CSV dan PDF juga dibuat di browser pada mode ini.
+
 ### Menjalankan simulator
 
 Di terminal lain, setelah backend hidup:
@@ -114,6 +149,7 @@ cd autofeeder/frontend
 npm install
 npm run dev        # http://127.0.0.1:5174, proxy /api ke :8010
 npm run build      # hasil di dist/, otomatis disajikan backend
+npm run demo       # data dummy tertanam, tanpa backend, :5174
 ```
 
 Generate device key:
@@ -196,7 +232,8 @@ autofeeder/
 │   └── src/
 │       ├── pages/             # dashboard, jadwal, manual, riwayat, alarm, ...
 │       ├── components/        # peta gantry, grafik SVG, komponen UI
-│       ├── api.js             # client API tanpa token
+│       ├── demo/              # dataset + mock API + ekspor CSV/PDF offline
+│       ├── api.js             # pemilih live API / data demo tertanam
 │       └── styles.css         # UI sederhana, responsif
 ├── simulator/device_sim.py    # simulator perangkat tanpa dependensi
 ├── docs/
@@ -204,7 +241,8 @@ autofeeder/
 │   ├── INTEGRATION.md         # integrasi Fish Linker & MySQL
 │   └── SECURITY.md            # model ancaman & checklist produksi
 ├── PLAN.md                    # rencana implementasi bertahap
-└── start.sh
+├── start.sh                   # backend + UI (API sungguhan)
+└── start-demo.sh              # UI saja dengan data tertanam
 ```
 
 ## API singkat

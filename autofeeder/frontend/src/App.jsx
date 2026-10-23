@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { DATA_MODE } from './api.js'
 import { fmtClock } from './utils.js'
 import { useClock } from './hooks.js'
 import DashboardPage from './pages/DashboardPage.jsx'
@@ -77,9 +78,11 @@ function Layout({ user }) {
         <div className="sidebar-foot">
           <div className="user-line">
             <span>{user.username}</span>
-            <span className="pill neutral">Mode Demo</span>
+            <span className="pill neutral">{DATA_MODE === 'demo' ? 'Tertanam' : 'Mode Demo'}</span>
           </div>
-          <div className="muted small">Data dummy untuk presentasi</div>
+          <div className="muted small">
+            {DATA_MODE === 'demo' ? 'Demo offline · tanpa backend' : 'Terhubung ke API backend'}
+          </div>
         </div>
       </aside>
 
@@ -97,7 +100,7 @@ function Layout({ user }) {
           <Outlet />
         </main>
         <footer className="app-foot muted small">
-          AutoFeeder Rail Gantry · mode demo presentasi · semua waktu WIB
+          AutoFeeder Rail Gantry · {DATA_MODE === 'demo' ? 'data demo tertanam di frontend' : 'mode demo presentasi'} · semua waktu WIB
         </footer>
       </div>
     </div>

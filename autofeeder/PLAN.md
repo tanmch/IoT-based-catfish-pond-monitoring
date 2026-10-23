@@ -34,6 +34,8 @@ halaman login, dan dengan data presentasi yang siap pakai.
 - [x] `.env.example` tanpa secret nyata; `.env` di-`.gitignore`.
 - [x] Validasi device key lemah ditolak saat startup.
 - [x] Mode presentasi tanpa login/akun/RBAC (`DEMO_MODE=true`).
+- [x] Mode demo frontend mandiri: dataset tertanam, tanpa request `/api`.
+- [x] Build default tetap terhubung ke API backend (switch `VITE_USE_MOCK`).
 - [x] Production menolak mode demo dan seed demo.
 - [x] Security headers (CSP, X-Frame-Options, nosniff, Referrer-Policy).
 - [x] CORS dan TrustedHost dibatasi lewat environment.
@@ -194,6 +196,7 @@ Material UI.
 
 - [x] HTML/CSS sederhana dengan React 18 + Vite (tanpa framework UI berat).
 - [x] Dashboard, jadwal, manual feed, riwayat, alarm, perangkat, audit.
+- [x] Demo UI mandiri dengan mode data tertanam dan ekspor CSV/PDF di browser.
 - [x] Peta gantry 10 kiri + 10 kanan dengan status dan porsi efektif.
 - [x] Grafik telemetri ringan (SVG, tanpa library chart besar).
 - [x] Jam WIB live dan format tanggal Indonesia.

@@ -150,7 +150,7 @@ export default function ManualFeedPage({ user }) {
                 type="number"
                 min="1"
                 max={maxGrams}
-                step="10"
+                step="1"
                 value={form.portion_grams}
                 onChange={(e) => setForm({ ...form, portion_grams: e.target.value })}
                 required

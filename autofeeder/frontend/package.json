@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --port 5174"
+    "preview": "vite preview --port 5174",
+    "dev:demo": "vite --mode demo",
+    "build:demo": "vite build --mode demo --outDir dist-demo",
+    "preview:demo": "vite preview --outDir dist-demo --port 5174",
+    "demo": "npm run build:demo && npm run preview:demo"
   },
   "dependencies": {
     "react": "^18.3.1",

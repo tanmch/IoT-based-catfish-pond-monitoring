@@ -1,4 +1,11 @@
+import { demoApi } from './demo/mockApi.js'
+
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+
+// Build-time switch:
+//   npm run dev/build                 -> live FastAPI backend (default)
+//   npm run dev:demo / build:demo     -> embedded dataset, no backend
+export const DATA_MODE = import.meta.env.VITE_USE_MOCK === 'true' ? 'demo' : 'api'
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -50,7 +57,7 @@ function queryString(params = {}) {
   return text ? `?${text}` : ''
 }
 
-export const api = {
+const liveApi = {
   dashboard: () => request('/dashboard'),
   ponds: () => request('/ponds'),
   pond: (id) => request(`/ponds/${id}`),
@@ -104,3 +111,5 @@ export const api = {
     URL.revokeObjectURL(url)
   },
 }
+
+export const api = DATA_MODE === 'demo' ? demoApi : liveApi
